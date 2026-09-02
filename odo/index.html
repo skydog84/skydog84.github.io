@@ -23,7 +23,7 @@ html,body{margin:0;padding:0}
 body{
   background:var(--bg); color:var(--ink);
   font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  padding-bottom:calc(84px + var(--safe-b));
+  padding-bottom:calc(150px + var(--safe-b));   /* clears the fixed Save bar + tab bar */
   -webkit-text-size-adjust:100%;
 }
 h1,h2,h3{margin:0 0 8px}
@@ -177,6 +177,37 @@ table.rt td input{padding:7px 8px;font-size:14px;border-radius:8px}
   background:#0f1830;border:1px solid var(--line);border-radius:12px;padding:11px 15px;font-size:13.5px;
   box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;gap:12px;align-items:center;max-width:92vw
 }
+
+/* ── live GPS tracker ─────────────────────────────────────────────── */
+.trk{border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--panel);margin:12px 0}
+.trk.on{border-color:var(--acc2);box-shadow:0 0 0 1px rgba(58,209,165,.25),0 8px 30px rgba(58,209,165,.10)}
+.trk-head{display:flex;align-items:center;gap:10px;padding:12px 14px}
+.trk-dot{width:10px;height:10px;border-radius:50%;background:var(--dim2);flex:0 0 auto}
+.trk.on .trk-dot{background:var(--acc2);animation:pulse 1.6s ease-in-out infinite}
+.trk.paused .trk-dot{background:var(--warn);animation:none}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+.trk-title{font-size:13px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
+.trk.on .trk-title{color:var(--acc2)}
+.trk-body{padding:0 14px 14px}
+.trk-big{display:flex;align-items:baseline;justify-content:center;gap:8px;padding:6px 0 2px}
+.trk-mi{font-size:52px;font-weight:850;letter-spacing:-1.5px;line-height:1;font-variant-numeric:tabular-nums}
+.trk-unit{font-size:16px;font-weight:800;color:var(--dim);letter-spacing:1px}
+.trk-sub{display:flex;justify-content:center;gap:16px;font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums;margin-top:6px}
+.trk-map{margin-top:12px;background:#0e1526;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.trk-map svg{display:block;width:100%;height:auto}
+.btn-track{
+  width:100%;padding:18px;border:0;border-radius:14px;font-size:17px;font-weight:800;
+  font-family:inherit;cursor:pointer;letter-spacing:.3px;color:#fff;
+  background:linear-gradient(96deg,#3f6fe0,#2fb894);
+}
+.btn-track.stop{background:linear-gradient(96deg,#c8324a,#e0603f)}
+.btn-track:active{transform:scale(.99)}
+.trk-row{display:flex;gap:9px;margin-top:9px}
+.trk-row .btn{flex:1}
+.acc-pill{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;letter-spacing:.4px}
+.acc-good{background:rgba(58,209,165,.16);color:#8ff0d5}
+.acc-ok{background:rgba(255,176,32,.15);color:#ffd98a}
+.acc-bad{background:rgba(255,92,114,.15);color:#ffb3bf}
 @media print{
   body{background:#fff;color:#000;padding:0;font-size:11pt}
   header,nav,.stickysave,.noprint,.sheet{display:none!important}
@@ -203,6 +234,39 @@ table.rt td input{padding:7px 8px;font-size:14px;border-radius:8px}
 <!-- ══════════════════ ADD TRIP ══════════════════ -->
 <section class="screen on" id="scr-add">
 <div class="wrap">
+
+
+  <div class="trk" id="trkCard">
+    <div class="trk-head">
+      <span class="trk-dot" id="trkDot"></span>
+      <span class="trk-title" id="trkTitle">Drive tracker</span>
+      <span class="spacer" style="flex:1"></span>
+      <span id="trkAcc"></span>
+    </div>
+    <div class="trk-body">
+      <div id="trkLive" class="hidden">
+        <div class="trk-big"><span class="trk-mi" id="trkMiles">0.0</span><span class="trk-unit">MI</span></div>
+        <div class="trk-sub">
+          <span id="trkTime">0:00</span>
+          <span id="trkSpeed">— mph</span>
+          <span id="trkFixes">0 fixes</span>
+        </div>
+        <div class="trk-map" id="trkMap"></div>
+        <div id="trkWarn"></div>
+      </div>
+      <div id="trkIdle">
+        <div class="mini" style="text-align:center;margin:2px 0 12px">
+          Hit start when you get in the truck. Stop when you arrive, then fill in where you went.
+        </div>
+      </div>
+      <button class="btn-track" id="trkBtn">Start driving</button>
+      <div class="trk-row hidden" id="trkRow2">
+        <button class="btn" id="trkPause">Pause</button>
+        <button class="btn danger" id="trkCancel">Discard</button>
+      </div>
+      <div class="tiny" id="trkNote" style="margin-top:9px;text-align:center"></div>
+    </div>
+  </div>
 
   <div class="counter" id="liveCounter">
     <div class="cap">Value of this trip</div>
@@ -530,6 +594,243 @@ function haversineMi(a,b,c,d){
   return R*2*Math.asin(Math.min(1,Math.sqrt(h)));
 }
 
+
+/* ══════════════════ LIVE DRIVE TRACKER ══════════════════
+   Start when you get in, stop when you arrive.
+
+   Honest limits, enforced in the UI rather than hidden:
+   iOS suspends a web app when the screen locks or you switch apps, so this
+   only runs with the app open. A screen wake lock is requested to keep it
+   that way. Any interruption is recorded as a gap and shown to you — the app
+   will never quietly hand you a short number for a court record.          */
+
+const TRACK_KEY = "odosimple.track.v1";
+const TRK = {
+  active:false, paused:false, startedAt:null, points:[], miles:0, gaps:[],
+  watchId:null, wakeLock:null, timer:null, hiddenAt:null,
+  lastAcc:null, lastSpeed:null, rejected:0
+};
+
+/* GPS points are noisy. Summing them raw overstates distance badly, so a
+   fix has to clear all three of these to count. */
+const TRK_MIN_ACC_M   = 50;    // ignore fixes worse than this
+const TRK_MIN_MOVE_M  = 12;    // ignore jitter while parked
+const TRK_MAX_MPH     = 120;   // ignore teleports
+
+function trkSave(){
+  try{
+    localStorage.setItem(TRACK_KEY, JSON.stringify({
+      active:TRK.active, paused:TRK.paused, startedAt:TRK.startedAt,
+      points:TRK.points, miles:TRK.miles, gaps:TRK.gaps
+    }));
+  }catch(e){ /* storage full — the in-memory track still works */ }
+}
+function trkClearSaved(){ try{ localStorage.removeItem(TRACK_KEY); }catch(e){} }
+
+function trkRestore(){
+  let raw = null;
+  try{ raw = localStorage.getItem(TRACK_KEY); }catch(e){}
+  if(!raw) return;
+  let d; try{ d = JSON.parse(raw); }catch(e){ return; }
+  if(!d || !d.active || !d.points || !d.points.length) { trkClearSaved(); return; }
+  const mins = Math.round((Date.now() - (d.points[d.points.length-1].t||Date.now()))/60000);
+  const go = confirm("A drive was still running when the app closed.\n\n"
+    + d.miles.toFixed(1) + " mi recorded, last fix " + mins + " min ago.\n\n"
+    + "OK to pick it back up, or Cancel to keep the miles and stop here.");
+  Object.assign(TRK, {active:true, paused:false, startedAt:d.startedAt,
+                      points:d.points, miles:d.miles, gaps:d.gaps||[]});
+  TRK.gaps.push({from:d.points[d.points.length-1].t, to:Date.now(), reason:"app closed"});
+  if(go){ trkBegin(true); } else { stopTracking(); }
+}
+
+async function trkWakeLock(){
+  try{
+    if("wakeLock" in navigator){
+      TRK.wakeLock = await navigator.wakeLock.request("screen");
+      TRK.wakeLock.addEventListener("release", ()=>{ TRK.wakeLock = null; });
+    }
+  }catch(e){ TRK.wakeLock = null; }
+}
+function trkReleaseWakeLock(){
+  try{ TRK.wakeLock && TRK.wakeLock.release(); }catch(e){}
+  TRK.wakeLock = null;
+}
+
+function startTracking(){
+  if(!navigator.geolocation){ toast("This device has no location API."); return; }
+  Object.assign(TRK, {active:true, paused:false, startedAt:Date.now(), points:[],
+                      miles:0, gaps:[], rejected:0, lastAcc:null, lastSpeed:null});
+  trkBegin(false);
+  toast("Tracking. Keep the app open — iOS stops a web app when the screen locks.", 6000);
+}
+
+function trkBegin(resuming){
+  trkWakeLock();
+  TRK.watchId = navigator.geolocation.watchPosition(trkOnFix, trkOnErr, {
+    enableHighAccuracy:true, maximumAge:0, timeout:20000
+  });
+  clearInterval(TRK.timer);
+  TRK.timer = setInterval(()=>{
+    renderTracker();
+    const hs = $("#hdrSub");
+    if(hs){
+      hs.textContent = (TRK.paused ? "⏸ drive paused · " : "● recording · ") + TRK.miles.toFixed(1) + " mi";
+      hs.style.color = TRK.paused ? "var(--warn)" : "var(--acc2)";
+    }
+    trkSave();
+  }, 1000);
+  renderTracker(); renderAll();
+}
+
+function trkOnFix(pos){
+  if(!TRK.active || TRK.paused) return;
+  const c = pos.coords;
+  TRK.lastAcc = c.accuracy;
+  TRK.lastSpeed = (c.speed != null && c.speed >= 0) ? c.speed * 2.236936 : null;
+  if(c.accuracy > TRK_MIN_ACC_M){ TRK.rejected++; renderTracker(); return; }
+
+  const pt = {t: Date.now(), lat: c.latitude, lon: c.longitude, acc: c.accuracy};
+  const prev = TRK.points[TRK.points.length-1];
+  if(prev){
+    const mi = haversineMi(prev.lat, prev.lon, pt.lat, pt.lon);
+    const meters = mi * 1609.344;
+    const secs = Math.max(0.001, (pt.t - prev.t)/1000);
+    const mph = mi / (secs/3600);
+    if(meters < TRK_MIN_MOVE_M) return;      // parked, or GPS shimmer
+    if(mph > TRK_MAX_MPH){ TRK.rejected++; return; }
+    TRK.miles = r1(TRK.miles + mi);
+  }
+  TRK.points.push(pt);
+  renderTracker(); trkSave();
+}
+
+function trkOnErr(e){
+  if(e.code === 1){
+    toast("Location permission denied — tracking can't run.", 6000);
+    stopTracking(true);
+  }
+}
+
+function pauseTracking(){
+  TRK.paused = !TRK.paused;
+  if(TRK.paused){ TRK.gaps.push({from:Date.now(), to:null, reason:"paused"}); }
+  else { const g = TRK.gaps[TRK.gaps.length-1]; if(g && g.to==null) g.to = Date.now(); }
+  renderTracker(); trkSave();
+}
+
+function stopTracking(discard){
+  if(TRK.watchId != null){ navigator.geolocation.clearWatch(TRK.watchId); TRK.watchId = null; }
+  clearInterval(TRK.timer); TRK.timer = null;
+  trkReleaseWakeLock();
+  const miles = r1(TRK.miles);
+  const pts = TRK.points.slice();
+  const gaps = TRK.gaps.filter(g => g.to && (g.to - g.from) > 20000);
+  const started = TRK.startedAt, ended = Date.now();
+  Object.assign(TRK, {active:false, paused:false, points:[], miles:0, gaps:[],
+                      startedAt:null, lastAcc:null, lastSpeed:null, rejected:0});
+  trkClearSaved(); renderTracker(); renderAll();
+  if(discard || miles <= 0 || pts.length < 2) return;
+
+  /* Hand the result to the Add form. The user still says where they went
+     and what for — the tracker only supplies the distance and the route. */
+  setMode("manual");
+  $("#fMiles").value = miles.toFixed(1);
+  $("#fRound").checked = false;
+  const last = pts[pts.length-1];
+  $("#fLat").value = last.lat.toFixed(6);
+  $("#fLon").value = last.lon.toFixed(6);
+  pendingTrack = {points: trkDownsample(pts), gaps, startedAt:started, endedAt:ended, trackedMiles:miles};
+  updateLive();
+  const mins = Math.round((ended - started)/60000);
+  let msg = "Drive recorded: " + miles.toFixed(1) + " mi in " + mins + " min.";
+  if(gaps.length) msg += " " + gaps.length + " interruption(s) — check the miles.";
+  toast(msg, 7000);
+  goto("add");
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+/* Keep the stored route small — one point roughly every 40 m is plenty to
+   draw the line and prove the shape of the trip. */
+function trkDownsample(pts){
+  if(pts.length <= 2) return pts;
+  const out = [pts[0]];
+  for(const p of pts.slice(1,-1)){
+    const q = out[out.length-1];
+    if(haversineMi(q.lat,q.lon,p.lat,p.lon) * 1609.344 >= 40) out.push(p);
+  }
+  out.push(pts[pts.length-1]);
+  return out.map(p => ({t:p.t, lat:+p.lat.toFixed(5), lon:+p.lon.toFixed(5)}));
+}
+
+let pendingTrack = null;   // attached to the next saved trip
+
+function fmtDur(ms){
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+  return h ? h+":"+String(m).padStart(2,"0")+":"+String(s%60).padStart(2,"0")
+           : m+":"+String(s%60).padStart(2,"0");
+}
+
+function renderTracker(){
+  const card = $("#trkCard"); if(!card) return;
+  card.classList.toggle("on", TRK.active && !TRK.paused);
+  card.classList.toggle("paused", TRK.active && TRK.paused);
+  $("#trkLive").classList.toggle("hidden", !TRK.active);
+  $("#trkIdle").classList.toggle("hidden", TRK.active);
+  $("#trkRow2").classList.toggle("hidden", !TRK.active);
+  $("#trkTitle").textContent = TRK.active ? (TRK.paused ? "Paused" : "Recording drive") : "Drive tracker";
+  $("#trkBtn").textContent = TRK.active ? "Stop and save" : "Start driving";
+  $("#trkBtn").classList.toggle("stop", TRK.active);
+  $("#trkPause").textContent = TRK.paused ? "Resume" : "Pause";
+
+  if(TRK.active){
+    $("#trkMiles").textContent = TRK.miles.toFixed(1);
+    $("#trkTime").textContent = fmtDur(Date.now() - TRK.startedAt);
+    $("#trkSpeed").textContent = TRK.lastSpeed != null ? Math.round(TRK.lastSpeed)+" mph" : "— mph";
+    $("#trkFixes").textContent = TRK.points.length + " fixes";
+    const a = TRK.lastAcc;
+    $("#trkAcc").innerHTML = a == null ? ""
+      : "<span class='acc-pill " + (a<=15?"acc-good":a<=40?"acc-ok":"acc-bad") + "'>±"+Math.round(a)+" m</span>";
+    $("#trkMap").innerHTML = trkMiniMap(TRK.points);
+    const hs = $("#hdrSub");
+    if(hs){
+      hs.textContent = (TRK.paused ? "⏸ drive paused · " : "● recording · ") + TRK.miles.toFixed(1) + " mi";
+      hs.style.color = TRK.paused ? "var(--warn)" : "var(--acc2)";
+    }
+    const realGaps = TRK.gaps.filter(g => g.to && (g.to-g.from) > 20000);
+    $("#trkWarn").innerHTML = realGaps.length
+      ? "<div class='warnbox' style='margin-top:10px'>Tracking was interrupted "+realGaps.length
+        +" time(s). Miles recorded while the app was closed are missing — check against your odometer before you file this.</div>"
+      : "";
+    $("#trkNote").textContent = TRK.wakeLock
+      ? "Screen kept awake. Leave the app open."
+      : "Keep the app open and the screen on — iOS stops a web app when it locks.";
+  } else {
+    $("#trkAcc").innerHTML = "";
+    $("#trkNote").textContent = "";
+  }
+}
+
+function trkMiniMap(pts){
+  if(pts.length < 2) return "<div style='padding:22px;text-align:center' class='tiny'>waiting for a second fix…</div>";
+  const W=680, H=220, M=14;
+  const las = pts.map(p=>p.lat), los = pts.map(p=>p.lon);
+  let minLa=Math.min(...las), maxLa=Math.max(...las), minLo=Math.min(...los), maxLo=Math.max(...los);
+  const kx = Math.cos(((minLa+maxLa)/2)*Math.PI/180);
+  let spanLa = Math.max(maxLa-minLa, 0.0015), spanLo = Math.max(maxLo-minLo, 0.0015/Math.max(kx,.1));
+  const cLa=(minLa+maxLa)/2, cLo=(minLo+maxLo)/2;
+  minLa=cLa-spanLa*0.62; maxLa=cLa+spanLa*0.62; minLo=cLo-spanLo*0.62; maxLo=cLo+spanLo*0.62;
+  const X = lo => M + ((lo-minLo)/(maxLo-minLo))*(W-2*M);
+  const Y = la => M + ((maxLa-la)/(maxLa-minLa))*(H-2*M);
+  const d = pts.map((p,i)=> (i?"L":"M")+X(p.lon).toFixed(1)+" "+Y(p.lat).toFixed(1)).join(" ");
+  const a = pts[0], b = pts[pts.length-1];
+  return "<svg viewBox='0 0 "+W+" "+H+"' xmlns='http://www.w3.org/2000/svg'>"
+    + "<rect width='"+W+"' height='"+H+"' fill='#0e1526'/>"
+    + "<path d='"+d+"' fill='none' stroke='#3ad1a5' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round' opacity='.9'/>"
+    + "<circle cx='"+X(a.lon).toFixed(1)+"' cy='"+Y(a.lat).toFixed(1)+"' r='6' fill='#5b8cff' stroke='#0e1526' stroke-width='2'/>"
+    + "<circle cx='"+X(b.lon).toFixed(1)+"' cy='"+Y(b.lat).toFixed(1)+"' r='7' fill='#3ad1a5' stroke='#0e1526' stroke-width='2'/>"
+    + "</svg>";
+}
+
 /* ── trip math ───────────────────────────────────────────────────── */
 function computeMiles(t){
   let base = null;
@@ -708,6 +1009,16 @@ function collectForm(){
     parking: num($("#fParking").value), tolls: num($("#fTolls").value), otherCost: num($("#fOther").value)
   };
   t.miles = computeMiles(t);
+  if(pendingTrack){
+    t.trackedMiles = pendingTrack.trackedMiles;
+    t.trackPoints  = pendingTrack.points;
+    t.trackGaps    = pendingTrack.gaps;
+    t.trackStartedAt = new Date(pendingTrack.startedAt).toISOString();
+    t.trackEndedAt   = new Date(pendingTrack.endedAt).toISOString();
+    t.measureSource  = "gps";
+  } else {
+    t.measureSource = t.milesManual != null ? "manual" : "odometer";
+  }
   const rr = resolveRate(led, date);
   t.rateCentsApplied = rr ? rr.cents : null;
   const gp = gasPriceInUse();
@@ -822,6 +1133,7 @@ function renderChips(){
 
 function resetAddForm(){
   editingId = null;
+  pendingTrack = null;
   $("#fDate").value = todayISO();
   $("#fOdoStart").value = lastOdoEnd()!=null ? lastOdoEnd() : "";
   $("#fOdoEnd").value = ""; $("#fMiles").value = "";
@@ -839,7 +1151,8 @@ function resetAddForm(){
 
 /* ── save / edit / delete with audit trail ───────────────────────── */
 const TRACKED = ["date","odoStart","odoEnd","milesManual","roundTrip","miles","destName","destAddress",
-  "destLat","destLon","purpose","forWhom","ledgerId","notes","parking","tolls","otherCost","rateCentsApplied"];
+  "destLat","destLon","purpose","forWhom","ledgerId","notes","parking","tolls","otherCost","rateCentsApplied",
+  "trackedMiles","measureSource"];
 
 function labelFor(field, val){
   if(field==="ledgerId"){ const l=ledgerById(val); return l?l.name:(val||"—"); }
@@ -875,6 +1188,7 @@ function saveTrip(){
     DB.settings.tripsSinceExport = (DB.settings.tripsSinceExport||0) + 1;
     save();
     const amt = tripAmount(t);
+    pendingTrack = null;
     toast("Saved · "+t.miles.toFixed(1)+" mi"+(amt!=null?" · "+money(amt):""));
   }
   resetAddForm(); renderAll();
@@ -998,8 +1312,14 @@ function openTrip(id){
     + kv("Mileage value", amt==null?"—":money(amt))
     + (costs>0 ? kv("Out-of-pocket costs", money(costs)) : "")
     + (costs>0 ? kv("Combined", money((amt||0)+costs)) : "")
-    + kv("How measured", t.milesManual!=null ? ("entered directly"+(t.roundTrip?" ×2 round trip":""))
+    + kv("How measured", t.measureSource==="gps"
+        ? ("GPS tracked · "+(t.trackPoints||[]).length+" points"
+           + (t.trackedMiles!=null && Math.abs(t.trackedMiles-t.miles)>0.05
+              ? " · recorded "+t.trackedMiles.toFixed(1)+" mi, edited to "+t.miles.toFixed(1) : ""))
+        : t.milesManual!=null ? ("entered directly"+(t.roundTrip?" ×2 round trip":""))
         : ("odometer "+(t.odoStart??"?")+" → "+(t.odoEnd??"?")+(t.roundTrip?" ×2":"")))
+    + (t.trackGaps && t.trackGaps.length
+        ? kv("Tracking interruptions", "<span style='color:var(--warn)'>"+t.trackGaps.length+" — miles may be short</span>") : "")
     + kv("Purpose", esc(t.purpose||"—"))
     + kv("For", esc(t.forWhom||"—"))
     + kv("Address", esc(t.destAddress||"—"))
@@ -1007,6 +1327,12 @@ function openTrip(id){
     + (straight!=null ? kv("Straight-line from home", straight.toFixed(1)+" mi") : "")
     + (t.notes ? kv("Notes", esc(t.notes)) : "")
     + "</div>";
+  if(t.trackPoints && t.trackPoints.length>1){
+    h += "<div class='card'><h2>Recorded route</h2><div class='mapwrap'>"+trkMiniMap(t.trackPoints)+"</div>"
+      + "<div class='tiny' style='margin-top:7px'>Captured live by GPS on this device between "
+      + esc((t.trackStartedAt||"").slice(11,16))+" and "+esc((t.trackEndedAt||"").slice(11,16))
+      + ". Blue is where the drive started, green where it ended.</div></div>";
+  }
   if(fuel!=null && amt!=null){
     const sp = r2(amt-fuel);
     h += "<div class='card'><h2>Fuel comparison</h2><div class='tiny' style='margin-bottom:6px'>Estimate for your information only. Never appears on a court or tax export.</div>"
@@ -1150,7 +1476,9 @@ function renderMap(){
     $("#mapLegend").innerHTML=""; $("#mapStats").innerHTML=""; return;
   }
 
-  const all = pts.map(p=>({lat:p.lat,lon:p.lon})).concat(home?[home]:[]);
+  const routePts = [];
+  list.forEach(t => { (t.trackPoints||[]).forEach(p => routePts.push({lat:p.lat, lon:p.lon})); });
+  const all = pts.map(p=>({lat:p.lat,lon:p.lon})).concat(home?[home]:[]).concat(routePts);
   let minLa=Math.min(...all.map(p=>p.lat)), maxLa=Math.max(...all.map(p=>p.lat));
   let minLo=Math.min(...all.map(p=>p.lon)), maxLo=Math.max(...all.map(p=>p.lon));
   const midLa = (minLa+maxLa)/2, kx = Math.cos(midLa*Math.PI/180);
@@ -1181,6 +1509,15 @@ function renderMap(){
         + "' stroke='#5b8cff' stroke-opacity='.5' stroke-width='"+wgt.toFixed(1)+"' stroke-linecap='round'/>";
     });
   }
+  /* recorded GPS routes — the roads actually driven */
+  list.filter(t => t.trackPoints && t.trackPoints.length > 1).forEach(t => {
+    const rc = (RATE_CLASSES[(ledgerById(t.ledgerId)||{}).rateClass]||{}).css || "custom";
+    const col = {medical:"#3ad1a5", business:"#5b8cff", charitable:"#c084fc", custom:"#ffb020"}[rc];
+    const d = t.trackPoints
+      .map((p,i)=> (i?"L":"M")+X(p.lon).toFixed(1)+" "+Y(p.lat).toFixed(1)).join(" ");
+    if(d) g += "<path d='"+d+"' fill='none' stroke='"+col+"' stroke-width='3' stroke-opacity='.85' stroke-linecap='round' stroke-linejoin='round'/>";
+  });
+
   /* destination pins */
   pts.sort((a,b)=>b.trips.length-a.trips.length).forEach((p,i) => {
     const r = Math.min(17, 7 + p.trips.length*1.6);
@@ -1216,7 +1553,10 @@ function renderMap(){
   $("#mapBox").innerHTML = "<svg viewBox='0 0 "+W+" "+H+"' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Trip map'>"
     + "<rect width='"+W+"' height='"+H+"' fill='#0e1526'/>" + g + "</svg>";
 
-  $("#mapLegend").innerHTML = "<div class='tiny' style='margin-top:8px'>Drawn from GPS coordinates stored on this device. "
+  const routeCount = list.filter(t => t.trackPoints && t.trackPoints.length>1).length;
+  $("#mapLegend").innerHTML = "<div class='tiny' style='margin-top:8px'>"
+    + (routeCount ? "<b>"+routeCount+" recorded route"+(routeCount===1?"":"s")+"</b> drawn from live GPS. " : "")
+    + "Everything here comes from coordinates stored on this device. "
     + "No map tiles, no basemap service, no network — the grid lines are true latitude/longitude, and the bar is a real distance scale. "
     + "Circle size and the number inside = how many trips to that destination.</div>";
 
@@ -1520,13 +1860,16 @@ function csvCell(v){
   const s = v===null||v===undefined ? "" : String(v);
   return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
 }
-const CSV_COLS = ["id","date","project","rateClass","rateCentsApplied","miles","odoStart","odoEnd","milesManual",
+const CSV_COLS = ["id","date","project","rateClass","rateCentsApplied","miles","measureSource","trackedMiles",
+  "gpsPoints","trackInterruptions","odoStart","odoEnd","milesManual",
   "roundTrip","amountDollars","destName","destAddress","destLat","destLon","purpose","forWhom","category",
   "parking","tolls","otherCost","totalCosts","combined","notes","createdAt","updatedAt","editCount","status"];
 function csvRow(t, status){
   const led = ledgerById(t.ledgerId) || {name:"(deleted project)", rateClass:""};
   const amt = tripAmount(t), costs = tripCosts(t);
-  return [t.id, t.date, led.name, led.rateClass, t.rateCentsApplied, t.miles, t.odoStart, t.odoEnd, t.milesManual,
+  return [t.id, t.date, led.name, led.rateClass, t.rateCentsApplied, t.miles,
+    t.measureSource||"", t.trackedMiles, (t.trackPoints||[]).length || "", (t.trackGaps||[]).length || "",
+    t.odoStart, t.odoEnd, t.milesManual,
     t.roundTrip?"yes":"no", amt==null?"":amt.toFixed(2), t.destName, t.destAddress, t.destLat, t.destLon,
     t.purpose, t.forWhom, led.rateClass==="medical"?"medical":"conservator/business",
     t.parking, t.tolls, t.otherCost, costs?costs.toFixed(2):"", ((amt||0)+costs).toFixed(2),
@@ -1769,7 +2112,10 @@ function renderAll(){
     if(on.id==="scr-totals") renderTotals();
     if(on.id==="scr-map")    renderMap();
   }
-  $("#hdrSub").textContent = DB.trips.length + " trip" + (DB.trips.length===1?"":"s") + " · offline";
+  $("#hdrSub").textContent = TRK.active
+    ? (TRK.paused ? "⏸ drive paused · " : "● recording · ") + TRK.miles.toFixed(1) + " mi"
+    : DB.trips.length + " trip" + (DB.trips.length===1?"":"s") + " · offline";
+  $("#hdrSub").style.color = TRK.active ? (TRK.paused ? "var(--warn)" : "var(--acc2)") : "";
 }
 
 function boot(){
@@ -1798,7 +2144,29 @@ function boot(){
   ["#tYear","#tLedger"].forEach(s => $(s).addEventListener("change", renderTotals));
   ["#mYear","#mLedger"].forEach(s => $(s).addEventListener("change", renderMap));
 
+  /* tracker */
+  $("#trkBtn").onclick = () => { TRK.active ? stopTracking(false) : startTracking(); };
+  $("#trkPause").onclick = pauseTracking;
+  $("#trkCancel").onclick = () => {
+    if(confirm("Discard this drive? The miles recorded so far are lost.")) stopTracking(true);
+  };
+  document.addEventListener("visibilitychange", () => {
+    if(!TRK.active) return;
+    if(document.hidden){
+      TRK.hiddenAt = Date.now();
+    } else {
+      if(TRK.hiddenAt && Date.now() - TRK.hiddenAt > 20000){
+        TRK.gaps.push({from:TRK.hiddenAt, to:Date.now(), reason:"app was in the background"});
+      }
+      TRK.hiddenAt = null;
+      if(!TRK.wakeLock) trkWakeLock();
+      renderTracker();
+    }
+  });
+  window.addEventListener("pagehide", () => { if(TRK.active) trkSave(); });
+
   renderAll(); resetAddForm(); goto("add");
+  renderTracker(); trkRestore();
 
   if("serviceWorker" in navigator && location.protocol!=="file:"){
     navigator.serviceWorker.register("sw.js").catch(()=>{});

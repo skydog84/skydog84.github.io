@@ -1,7 +1,7 @@
 /* ODO simple — offline service worker.
    Cache-first for the app shell. There are no runtime network calls;
    this exists only so the app launches with no connection at all. */
-const CACHE = "odo-simple-v2";
+const CACHE = "odo-simple-v3";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./icon-180.png"];
 
 self.addEventListener("install", e => {
