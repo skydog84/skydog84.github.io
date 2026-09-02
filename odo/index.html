@@ -1,0 +1,1811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ODO simple">
+<title>ODO simple — Mileage Log</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{
+  --bg:#0b1020; --panel:#141b31; --panel2:#1b2440; --line:#2a3559;
+  --ink:#eef2ff; --dim:#93a0c4; --dim2:#6b7aa3;
+  --acc:#5b8cff; --acc2:#3ad1a5; --warn:#ffb020; --bad:#ff5c72;
+  --med:#3ad1a5; --biz:#5b8cff; --cha:#c084fc; --cus:#ffb020;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:calc(84px + var(--safe-b));
+  -webkit-text-size-adjust:100%;
+}
+h1,h2,h3{margin:0 0 8px}
+h1{font-size:19px;letter-spacing:.5px}
+h2{font-size:15px;color:var(--dim);text-transform:uppercase;letter-spacing:1.2px;font-weight:700}
+h3{font-size:15px}
+a{color:var(--acc)}
+.wrap{max-width:720px;margin:0 auto;padding:10px 12px 0}
+header{
+  position:sticky;top:0;z-index:40;background:rgba(11,16,32,.94);
+  backdrop-filter:saturate(160%) blur(10px);border-bottom:1px solid var(--line);
+  padding-top:env(safe-area-inset-top,0px);
+}
+.hrow{display:flex;align-items:center;gap:10px;max-width:720px;margin:0 auto;padding:10px 12px}
+.logo{font-weight:800;letter-spacing:2px;font-size:16px;
+  background:linear-gradient(92deg,#5b8cff,#3ad1a5);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{font-size:11px;color:var(--dim2);letter-spacing:.4px}
+.spacer{flex:1}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}
+.card.tight{padding:10px 12px}
+label{display:block;font-size:12px;color:var(--dim);margin:0 0 5px;letter-spacing:.4px;font-weight:600}
+input,select,textarea{
+  width:100%;background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+  border-radius:11px;padding:12px 12px;font-size:16px;font-family:inherit;outline:none;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(91,140,255,.18)}
+textarea{min-height:64px;resize:vertical}
+.big-num{font-size:26px;font-weight:800;letter-spacing:1px;text-align:center;padding:16px 10px;font-variant-numeric:tabular-nums}
+.row{display:flex;gap:10px}
+.row>*{flex:1;min-width:0}
+.field{margin:0 0 12px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+  border-radius:11px;padding:11px 14px;font-size:14px;font-weight:650;cursor:pointer;
+  font-family:inherit;
+}
+.btn:active{transform:scale(.985)}
+.btn.pri{background:linear-gradient(96deg,#3f6fe0,#2fb894);border-color:transparent;color:#fff}
+.btn.danger{border-color:#5a2434;color:#ffb3bf;background:#2a1620}
+.btn.ghost{background:transparent}
+.btn.sm{padding:7px 10px;font-size:12.5px;border-radius:9px}
+.btn.wide{width:100%}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button{
+  flex:1 1 auto;min-width:96px;background:var(--panel2);border:1.5px solid var(--line);color:var(--dim);
+  border-radius:11px;padding:12px 8px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+.seg button .rc{font-size:10px;font-weight:600;opacity:.75;letter-spacing:.4px}
+.seg button.on{color:#fff;border-color:currentColor}
+.seg button.on[data-rc="medical"]{border-color:var(--med);background:rgba(58,209,165,.14);color:#8ff0d5}
+.seg button.on[data-rc="business"]{border-color:var(--biz);background:rgba(91,140,255,.14);color:#b9cdff}
+.seg button.on[data-rc="charitable"]{border-color:var(--cha);background:rgba(192,132,252,.14);color:#ddc2ff}
+.seg button.on[data-rc="custom"]{border-color:var(--cus);background:rgba(255,176,32,.13);color:#ffd98a}
+.chips{display:flex;gap:7px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+.chip{
+  flex:0 0 auto;background:var(--panel2);border:1px solid var(--line);border-radius:999px;
+  padding:8px 13px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;user-select:none;
+}
+.chip:active{border-color:var(--acc)}
+.counter{
+  text-align:center;padding:18px 10px 12px;border-radius:14px;
+  background:radial-gradient(120% 130% at 50% 0%,#1a2647 0%,var(--panel) 62%);
+  border:1px solid var(--line);
+}
+.odo{display:inline-flex;align-items:baseline;justify-content:center;font-variant-numeric:tabular-nums}
+.odo .cur{font-size:26px;font-weight:800;color:var(--dim);margin-right:2px}
+.digit{
+  display:inline-block;height:1.12em;overflow:hidden;vertical-align:bottom;
+  font-size:44px;font-weight:850;letter-spacing:-1px;line-height:1.12;
+}
+.digit.small{font-size:30px}
+.digit .strip{display:block;transition:transform .42s cubic-bezier(.22,1,.36,1)}
+.digit .strip span{display:block;height:1.12em}
+.static{font-size:44px;font-weight:850;letter-spacing:-1px;line-height:1.12}
+.static.small{font-size:30px}
+.cap{font-size:11.5px;color:var(--dim2);letter-spacing:1.1px;text-transform:uppercase;font-weight:700}
+.mini{font-size:12.5px;color:var(--dim)}
+.mono{font-variant-numeric:tabular-nums}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.kv:last-child{border-bottom:0}
+.kv b{font-weight:750;font-variant-numeric:tabular-nums}
+.warnbox{border:1px solid #5a4520;background:#2a2113;color:#ffd98a;border-radius:11px;padding:10px 12px;font-size:13px;margin:8px 0}
+.warnbox.bad{border-color:#5a2434;background:#2a1620;color:#ffb3bf}
+.warnbox.ok{border-color:#1f4a3c;background:#12261f;color:#8ff0d5}
+.warnbox ul{margin:6px 0 0;padding-left:18px}
+.badge{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.6px;padding:3px 8px;border-radius:999px;text-transform:uppercase}
+.badge[data-rc="medical"]{background:rgba(58,209,165,.16);color:#8ff0d5}
+.badge[data-rc="business"]{background:rgba(91,140,255,.16);color:#b9cdff}
+.badge[data-rc="charitable"]{background:rgba(192,132,252,.16);color:#ddc2ff}
+.badge[data-rc="custom"]{background:rgba(255,176,32,.15);color:#ffd98a}
+.trip{display:flex;gap:11px;align-items:center;padding:11px 12px;border:1px solid var(--line);
+  background:var(--panel);border-radius:12px;margin:7px 0;cursor:pointer}
+.trip .d{flex:0 0 46px;text-align:center}
+.trip .d .dd{font-size:19px;font-weight:800;line-height:1}
+.trip .d .mm{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:.6px}
+.trip .m{flex:1;min-width:0}
+.trip .m .t1{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip .m .t2{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip .r{text-align:right;flex:0 0 auto}
+.trip .r .amt{font-weight:800;font-variant-numeric:tabular-nums}
+.trip .r .mi{font-size:11.5px;color:var(--dim2);font-variant-numeric:tabular-nums}
+.trip.flag{border-color:#5a4520}
+.month{margin:16px 0 4px;font-size:12px;color:var(--dim2);letter-spacing:1.2px;text-transform:uppercase;font-weight:800}
+nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:50;background:rgba(11,16,32,.96);
+  backdrop-filter:blur(12px);border-top:1px solid var(--line);
+  padding-bottom:var(--safe-b);
+}
+.nrow{display:flex;max-width:720px;margin:0 auto}
+nav button{
+  flex:1;background:none;border:0;color:var(--dim2);padding:9px 2px 8px;font-size:10.5px;
+  font-weight:700;letter-spacing:.4px;cursor:pointer;font-family:inherit;display:flex;
+  flex-direction:column;align-items:center;gap:3px
+}
+nav button svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--acc)}
+.screen{display:none}
+.screen.on{display:block}
+.sheet{position:fixed;inset:0;z-index:80;background:rgba(4,7,16,.72);display:none;align-items:flex-end}
+.sheet.on{display:flex}
+.sheet .inner{
+  background:var(--bg);width:100%;max-height:92vh;overflow:auto;border-top-left-radius:18px;
+  border-top-right-radius:18px;border-top:1px solid var(--line);padding:6px 12px calc(24px + var(--safe-b));
+}
+.grab{width:38px;height:4px;background:var(--line);border-radius:999px;margin:8px auto 12px}
+.stickysave{
+  position:fixed;left:0;right:0;bottom:calc(58px + var(--safe-b));z-index:45;padding:10px 12px;
+  background:linear-gradient(180deg,rgba(11,16,32,0),rgba(11,16,32,.96) 34%);
+}
+.stickysave .in{max-width:720px;margin:0 auto}
+.stickysave .btn{padding:16px;font-size:16px;border-radius:14px}
+details.costs summary{cursor:pointer;color:var(--acc);font-size:13.5px;font-weight:700;padding:8px 0;list-style:none}
+details.costs summary::-webkit-details-marker{display:none}
+table.rt{width:100%;border-collapse:collapse;font-size:13px}
+table.rt th,table.rt td{border-bottom:1px solid var(--line);padding:7px 5px;text-align:left}
+table.rt th{color:var(--dim2);font-size:10.5px;text-transform:uppercase;letter-spacing:.7px}
+table.rt td input{padding:7px 8px;font-size:14px;border-radius:8px}
+.logline{font-size:12px;color:var(--dim);border-left:2px solid var(--line);padding:3px 0 3px 9px;margin:4px 0}
+.tiny{font-size:11px;color:var(--dim2)}
+.hidden{display:none!important}
+.mapwrap{background:#0e1526;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.mapwrap svg{display:block;width:100%;height:auto}
+.nowrap{white-space:nowrap}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.toast{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:calc(126px + var(--safe-b));z-index:90;
+  background:#0f1830;border:1px solid var(--line);border-radius:12px;padding:11px 15px;font-size:13.5px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;gap:12px;align-items:center;max-width:92vw
+}
+@media print{
+  body{background:#fff;color:#000;padding:0;font-size:11pt}
+  header,nav,.stickysave,.noprint,.sheet{display:none!important}
+  .card{border:0;padding:0;margin:0 0 10pt;background:none}
+  .wrap{max-width:none;padding:0}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <div>
+      <div class="logo">ODO&nbsp;simple</div>
+      <div class="sub" id="hdrSub">offline mileage log</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn sm ghost" id="btnPrintTop" title="Reports">Reports</button>
+  </div>
+</header>
+
+<div id="nag" class="wrap hidden noprint"></div>
+
+<!-- ══════════════════ ADD TRIP ══════════════════ -->
+<section class="screen on" id="scr-add">
+<div class="wrap">
+
+  <div class="counter" id="liveCounter">
+    <div class="cap">Value of this trip</div>
+    <div class="odo" id="odoLive"></div>
+    <div class="mini" id="liveSub" style="margin-top:6px">enter miles to begin</div>
+    <div class="mini" id="liveFuel" style="margin-top:4px;color:var(--dim2)"></div>
+  </div>
+
+  <div class="card">
+    <div class="field">
+      <label>Project / ledger <span style="color:var(--bad)">*required</span></label>
+      <div class="seg" id="ledgerSeg"></div>
+      <div class="tiny" style="margin-top:7px">
+        <a href="#" id="mgLedgers">Manage projects</a> · each project carries its own mileage rate
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="fDate">
+    </div>
+
+    <div class="field">
+      <div class="spread" style="margin-bottom:6px">
+        <label style="margin:0">Mileage</label>
+        <button class="btn sm ghost" id="toggleMode" type="button">I didn't read the odometer</button>
+      </div>
+      <div id="odoMode">
+        <div class="row">
+          <div><label>Odometer start</label><input inputmode="decimal" id="fOdoStart" placeholder="0"></div>
+          <div><label>Odometer end</label><input inputmode="decimal" id="fOdoEnd" placeholder="0"></div>
+        </div>
+        <div class="tiny" id="odoHint" style="margin-top:6px"></div>
+      </div>
+      <div id="manMode" class="hidden">
+        <label>Miles driven</label>
+        <input inputmode="decimal" id="fMiles" placeholder="0.0">
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="spread" style="cursor:pointer">
+        <span id="rtLabel">Round trip — double the miles entered</span>
+        <input type="checkbox" id="fRound" style="width:auto;transform:scale(1.35);margin-left:10px">
+      </label>
+      <div class="tiny" id="rtHint"></div>
+    </div>
+
+    <div class="field">
+      <label>Recent destinations <span class="tiny" style="font-weight:400">(hold to remove)</span></label>
+      <div class="chips" id="destChips"><span class="tiny">none yet — your first save starts the list</span></div>
+    </div>
+
+    <div class="field"><label>Destination name</label><input id="fDestName" placeholder="e.g. Regional Medical Center"></div>
+    <div class="field"><label>Destination address</label><input id="fDestAddr" placeholder="street, city, state"></div>
+
+    <div class="field">
+      <div class="spread" style="margin-bottom:6px">
+        <label style="margin:0">Location (for the trip map)</label>
+        <button class="btn sm" id="btnGps" type="button">Use my location</button>
+      </div>
+      <div class="row">
+        <div><input inputmode="decimal" id="fLat" placeholder="latitude"></div>
+        <div><input inputmode="decimal" id="fLon" placeholder="longitude"></div>
+      </div>
+      <div class="tiny" id="gpsHint" style="margin-top:6px">Optional. GPS works with no signal and no network. Tap it when you park.</div>
+    </div>
+
+    <div class="field"><label>Purpose</label><input id="fPurpose" placeholder="cardiology follow-up"></div>
+    <div class="field"><label>For whom</label><input id="fForWhom"></div>
+
+    <details class="costs">
+      <summary>+ Add costs (parking, tolls, other)</summary>
+      <div class="row" style="margin-top:8px">
+        <div><label>Parking $</label><input inputmode="decimal" id="fParking" placeholder="0.00"></div>
+        <div><label>Tolls $</label><input inputmode="decimal" id="fTolls" placeholder="0.00"></div>
+        <div><label>Other $</label><input inputmode="decimal" id="fOther" placeholder="0.00"></div>
+      </div>
+    </details>
+
+    <div class="field" style="margin-top:10px"><label>Notes</label><textarea id="fNotes" placeholder="optional"></textarea></div>
+  </div>
+
+  <div id="addWarn"></div>
+  <div style="height:8px"></div>
+</div>
+<div class="stickysave"><div class="in">
+  <button class="btn pri wide" id="btnSave">Save trip</button>
+</div></div>
+</section>
+
+<!-- ══════════════════ TRIPS ══════════════════ -->
+<section class="screen" id="scr-trips">
+<div class="wrap">
+  <div class="card tight">
+    <input id="qSearch" placeholder="Search destination, purpose, notes…" style="margin-bottom:9px">
+    <div class="row">
+      <div><label>Year</label><select id="qYear"></select></div>
+      <div><label>Project</label><select id="qLedger"></select></div>
+    </div>
+  </div>
+  <div id="tripList"></div>
+  <div style="height:20px"></div>
+</div>
+</section>
+
+<!-- ══════════════════ TOTALS ══════════════════ -->
+<section class="screen" id="scr-totals">
+<div class="wrap">
+  <div class="card tight">
+    <div class="row">
+      <div><label>Year</label><select id="tYear"></select></div>
+      <div><label>Project</label><select id="tLedger"></select></div>
+    </div>
+  </div>
+  <div class="counter">
+    <div class="cap">Total value</div>
+    <div class="odo" id="odoTotals"></div>
+    <div class="mini" id="totalsSub" style="margin-top:6px"></div>
+  </div>
+  <div id="totalsWarn"></div>
+  <div id="totalsBody"></div>
+  <div style="height:20px"></div>
+</div>
+</section>
+
+<!-- ══════════════════ MAP ══════════════════ -->
+<section class="screen" id="scr-map">
+<div class="wrap">
+  <div class="card tight">
+    <div class="row">
+      <div><label>Year</label><select id="mYear"></select></div>
+      <div><label>Project</label><select id="mLedger"></select></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Where we drove</h2>
+    <div class="mapwrap" id="mapBox"></div>
+    <div id="mapLegend"></div>
+  </div>
+  <div id="mapStats"></div>
+  <div style="height:20px"></div>
+</div>
+</section>
+
+<!-- ══════════════════ SETTINGS ══════════════════ -->
+<section class="screen" id="scr-set">
+<div class="wrap" id="setBody"></div>
+</section>
+
+<!-- ══════════════════ REPORT (print) ══════════════════ -->
+<section class="screen" id="scr-report"><div class="wrap" id="reportBody"></div></section>
+
+<div class="sheet" id="sheet"><div class="inner"><div class="grab"></div><div id="sheetBody"></div></div></div>
+
+<nav class="noprint"><div class="nrow">
+  <button data-s="add" class="on"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+  <button data-s="trips"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Trips</button>
+  <button data-s="totals"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Totals</button>
+  <button data-s="map"><svg viewBox="0 0 24 24"><path d="M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>Map</button>
+  <button data-s="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>Setup</button>
+</div></nav>
+
+<script>
+"use strict";
+/* ═══════════════════════════════════════════════════════════════════
+   ODO simple — offline mileage log
+   Single file. No network at runtime. Data lives in localStorage.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const KEY = "odosimple.v1";
+const VERIFIED = "2026-09-02";
+
+/* ── verified rate table (see README for sources) ────────────────── */
+const SEED_RATES = [
+  {rateClass:"business",   effectiveFrom:"2025-01-01", cents:70.0,
+   source:"IRS Notice 2025-5", sourceUrl:"https://www.irs.gov/pub/irs-drop/n-25-05.pdf", verifiedOn:VERIFIED},
+  {rateClass:"medical",    effectiveFrom:"2025-01-01", cents:21.0,
+   source:"IRS Notice 2025-5", sourceUrl:"https://www.irs.gov/pub/irs-drop/n-25-05.pdf", verifiedOn:VERIFIED},
+  {rateClass:"charitable", effectiveFrom:"2025-01-01", cents:14.0,
+   source:"IRC 170(i) / Notice 2025-5", sourceUrl:"https://www.irs.gov/pub/irs-drop/n-25-05.pdf", verifiedOn:VERIFIED},
+  {rateClass:"business",   effectiveFrom:"2026-01-01", cents:72.5,
+   source:"IRS Notice 2026-10", sourceUrl:"https://www.irs.gov/pub/irs-drop/n-26-10.pdf", verifiedOn:VERIFIED},
+  {rateClass:"medical",    effectiveFrom:"2026-01-01", cents:20.5,
+   source:"IRS Notice 2026-10", sourceUrl:"https://www.irs.gov/pub/irs-drop/n-26-10.pdf", verifiedOn:VERIFIED},
+  {rateClass:"charitable", effectiveFrom:"2026-01-01", cents:14.0,
+   source:"IRC 170(i) / Notice 2026-10", sourceUrl:"https://www.irs.gov/pub/irs-drop/n-26-10.pdf", verifiedOn:VERIFIED},
+  {rateClass:"business",   effectiveFrom:"2026-07-01", cents:76.0,
+   source:"IRS Announcement 2026-11 (IRB 2026-29)", sourceUrl:"https://www.irs.gov/irb/2026-29_irb", verifiedOn:VERIFIED},
+  {rateClass:"medical",    effectiveFrom:"2026-07-01", cents:23.5,
+   source:"IRS Announcement 2026-11 (IRB 2026-29)", sourceUrl:"https://www.irs.gov/irb/2026-29_irb", verifiedOn:VERIFIED},
+  {rateClass:"charitable", effectiveFrom:"2026-07-01", cents:14.0,
+   source:"IRC 170(i) — fixed by statute", sourceUrl:"https://www.irs.gov/tax-professionals/standard-mileage-rates", verifiedOn:VERIFIED},
+  {rateClass:"mi_state",   effectiveFrom:"2026-01-01", cents:47.0,
+   source:"Michigan DTMB Travel Rates FY2026, standard rate", sourceUrl:"https://www.michigan.gov/dtmb/services/travel", verifiedOn:VERIFIED},
+  {rateClass:"mi_state_premium", effectiveFrom:"2026-01-01", cents:72.5,
+   source:"Michigan DTMB Travel Rates FY2026, premium rate", sourceUrl:"https://www.michigan.gov/dtmb/services/travel", verifiedOn:VERIFIED}
+];
+
+const RATE_CLASSES = {
+  medical:{label:"IRS medical", css:"medical"},
+  business:{label:"IRS business", css:"business"},
+  charitable:{label:"IRS charitable", css:"charitable"},
+  mi_state:{label:"MI state standard", css:"custom"},
+  mi_state_premium:{label:"MI state premium", css:"custom"},
+  custom:{label:"Custom rate", css:"custom"}
+};
+
+const SEED_LEDGERS = [
+  {name:"Medical",   rateClass:"medical",  forWhomDefault:""},
+  {name:"Fiduciary", rateClass:"business", forWhomDefault:""},
+  {name:"Work",      rateClass:"business", forWhomDefault:""}
+];
+
+/* ── tiny helpers ────────────────────────────────────────────────── */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = Math.random()*16|0; return (c==="x"?r:(r&0x3|0x8)).toString(16);
+    }));
+const nowISO = () => new Date().toISOString();
+const todayISO = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
+const num = v => { if(v===""||v===null||v===undefined) return null; const n=parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isFinite(n)?n:null; };
+const r1  = n => Math.round((n+Number.EPSILON)*10)/10;
+const r2  = n => Math.round((n+Number.EPSILON)*100)/100;
+const money = n => "$"+(n<0?"-":"")+Math.abs(r2(n)).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");
+const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const yearOf = d => String(d||"").slice(0,4);
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtDate = d => { if(!d) return ""; const [y,m,dd]=d.split("-"); return MON[+m-1]+" "+(+dd)+", "+y; };
+
+/* ── storage ─────────────────────────────────────────────────────── */
+let DB = null;
+
+function freshDB(){
+  const ledgers = SEED_LEDGERS.map(l => ({
+    id: uuid(), name:l.name, rateClass:l.rateClass, customRateCents:null,
+    forWhomDefault:l.forWhomDefault, archived:false, createdAt:nowISO()
+  }));
+  return {
+    version:1, createdAt:nowISO(),
+    settings:{
+      defaultPerson:"",
+      lastLedgerId:null, lastMode:"odo",
+      mpg:null, gasPrice:null,
+      homeLabel:"Home", homeLat:null, homeLon:null,
+      lastExportAt:null, tripsSinceExport:0
+    },
+    ledgers,
+    rates: SEED_RATES.map(r => Object.assign({id:uuid()}, r)),
+    trips:[], deleted:[], fillups:[], systemLog:[]
+  };
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw){ DB = freshDB(); save(); return; }
+    DB = JSON.parse(raw);
+    // forward-compat shims
+    DB.settings = Object.assign(freshDB().settings, DB.settings||{});
+    ["ledgers","rates","trips","deleted","fillups","systemLog"].forEach(k => { if(!Array.isArray(DB[k])) DB[k]=[]; });
+    if(!DB.ledgers.length) DB.ledgers = freshDB().ledgers;
+    if(!DB.rates.length)   DB.rates   = freshDB().rates;
+  }catch(e){
+    console.error("load failed", e);
+    DB = freshDB();
+  }
+}
+let saveErr = false;
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(DB)); saveErr=false; }
+  catch(e){
+    if(!saveErr){ saveErr=true; toast("Could not save — device storage may be full. Export a backup now.", 8000); }
+    console.error(e);
+  }
+}
+function sysLog(kind, detail){
+  DB.systemLog.push({ts:nowISO(), kind, detail});
+  if(DB.systemLog.length>800) DB.systemLog.splice(0, DB.systemLog.length-800);
+}
+
+/* ── rates ───────────────────────────────────────────────────────── */
+function ledgerById(id){ return DB.ledgers.find(l => l.id===id) || null; }
+function rateForDate(rateClass, dateISO){
+  const cand = DB.rates
+    .filter(r => r.rateClass===rateClass && r.effectiveFrom <= dateISO)
+    .sort((a,b) => a.effectiveFrom < b.effectiveFrom ? 1 : -1);
+  return cand[0] || null;
+}
+/** Returns {cents, label, source} or null when nothing is verified for that date. */
+function resolveRate(ledger, dateISO){
+  if(!ledger || !dateISO) return null;
+  if(ledger.rateClass === "custom"){
+    if(ledger.customRateCents==null) return null;
+    return {cents:ledger.customRateCents, label:"Custom", source:"manual entry — "+ledger.name};
+  }
+  const r = rateForDate(ledger.rateClass, dateISO);
+  if(!r) return null;
+  return {cents:r.cents, label:(RATE_CLASSES[ledger.rateClass]||{}).label||ledger.rateClass, source:r.source, effectiveFrom:r.effectiveFrom};
+}
+
+/* ── fuel ────────────────────────────────────────────────────────── */
+function gasPriceInUse(){
+  const f = DB.fillups.slice().sort((a,b)=> a.date<b.date?1:-1).slice(0,3);
+  const good = f.filter(x => num(x.gallons)>0 && num(x.total)>0);
+  if(good.length){
+    const g = good.reduce((s,x)=>s+num(x.gallons),0);
+    const t = good.reduce((s,x)=>s+num(x.total),0);
+    return {price:r2(t/g), src:"rolling average of last "+good.length+" fill-up"+(good.length>1?"s":"")};
+  }
+  if(DB.settings.gasPrice!=null) return {price:DB.settings.gasPrice, src:"manually entered price"};
+  return {price:null, src:"no gas price set"};
+}
+function fuelFor(miles, mpg, price){
+  if(!miles || !mpg || !price) return null;
+  return r2((miles/mpg)*price);
+}
+
+/* ── geo ─────────────────────────────────────────────────────────── */
+function haversineMi(a,b,c,d){
+  const R=3958.7613, t=Math.PI/180;
+  const dLa=(c-a)*t, dLo=(d-b)*t;
+  const h=Math.sin(dLa/2)**2 + Math.cos(a*t)*Math.cos(c*t)*Math.sin(dLo/2)**2;
+  return R*2*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+
+/* ── trip math ───────────────────────────────────────────────────── */
+function computeMiles(t){
+  let base = null;
+  if(t.milesManual != null) base = t.milesManual;
+  else if(t.odoStart != null && t.odoEnd != null) base = t.odoEnd - t.odoStart;
+  if(base == null) return null;
+  return r1(t.roundTrip ? base*2 : base);
+}
+function tripAmount(t){
+  const m = t.miles || 0, c = t.rateCentsApplied;
+  return c==null ? null : r2(m * c / 100);
+}
+function tripCosts(t){ return r2((t.parking||0)+(t.tolls||0)+(t.otherCost||0)); }
+function activeTrips(){ return DB.trips; }
+function tripsSorted(){ return DB.trips.slice().sort((a,b)=> a.date===b.date ? (a.createdAt<b.createdAt?1:-1) : (a.date<b.date?1:-1)); }
+function lastOdoEnd(){
+  const withOdo = DB.trips.filter(t => t.odoEnd!=null).sort((a,b)=> a.date===b.date ? (a.createdAt<b.createdAt?1:-1) : (a.date<b.date?1:-1));
+  return withOdo.length ? withOdo[0].odoEnd : null;
+}
+
+/* ── validation (warns, never blocks) ────────────────────────────── */
+function validateTrip(t, ignoreId){
+  const w = [];
+  if(!t.ledgerId) w.push({level:"bad", msg:"No project selected. A trip must be tagged to one project."});
+  if(!t.date) w.push({level:"bad", msg:"No date."});
+  if(t.rateCentsApplied == null)
+    w.push({level:"bad", msg:"No verified rate for this project on this date. Set one in Setup → Rate table, or the dollar value will be blank."});
+  if(t.odoStart!=null && t.odoEnd!=null && t.odoEnd <= t.odoStart)
+    w.push({level:"warn", msg:"End odometer ("+t.odoEnd+") is not greater than start ("+t.odoStart+")."});
+  if(t.miles!=null && t.miles > 300)
+    w.push({level:"warn", msg:"That's "+t.miles+" miles in one trip. Double-check it."});
+  if(t.miles!=null && t.miles < 0.5 && t.miles > 0)
+    w.push({level:"warn", msg:"Under half a mile. Double-check it."});
+  if(t.miles!=null && t.miles === 0)
+    w.push({level:"warn", msg:"Zero miles."});
+
+  const prev = DB.trips
+    .filter(x => x.id!==ignoreId && x.odoEnd!=null && (x.date < t.date || (x.date===t.date)))
+    .sort((a,b)=> a.date===b.date ? (a.createdAt<b.createdAt?1:-1) : (a.date<b.date?1:-1))[0];
+  if(prev && t.odoStart!=null && t.odoStart < prev.odoEnd)
+    w.push({level:"warn", msg:"Start odometer ("+t.odoStart+") is below the last recorded reading ("+prev.odoEnd+" on "+fmtDate(prev.date)+")."});
+
+  const dn = (t.destName||"").trim().toLowerCase();
+  if(dn){
+    const matches = DB.trips.filter(x => x.id!==ignoreId && x.date===t.date && (x.destName||"").trim().toLowerCase()===dn);
+    // a cross-project collision always outranks a same-project repeat
+    const dupe = matches.find(x => x.ledgerId !== t.ledgerId) || matches[0];
+    if(dupe){
+      const sameLed = dupe.ledgerId === t.ledgerId;
+      w.push({level: sameLed?"warn":"bad",
+        msg: sameLed
+          ? "Another trip to “"+esc(t.destName)+"” is already logged on "+fmtDate(t.date)+"."
+          : "DOUBLE-CLAIM RISK: “"+esc(t.destName)+"” on "+fmtDate(t.date)+" is already logged under a different project ("+esc((ledgerById(dupe.ledgerId)||{}).name||"?")+"). The same mile must not be claimed twice."});
+    }
+  }
+  if(t.destLat!=null && t.destLon!=null && DB.settings.homeLat!=null && DB.settings.homeLon!=null && t.miles){
+    const straight = haversineMi(DB.settings.homeLat, DB.settings.homeLon, t.destLat, t.destLon);
+    const expect = t.roundTrip || t.miles > straight*1.6 ? straight*2 : straight;
+    if(t.miles > expect*2.5 && straight > 1)
+      w.push({level:"warn", msg:"Logged "+t.miles+" mi, but straight-line home→destination is only "+r1(straight)+" mi. Verify the odometer."});
+  }
+  return w;
+}
+
+/* ── cross-project double-claim scan (totals screen) ─────────────── */
+function doubleClaimScan(year){
+  const byKey = {};
+  DB.trips.filter(t => !year || yearOf(t.date)===year).forEach(t => {
+    const k = t.date + "|" + (t.destName||"").trim().toLowerCase();
+    if(!(t.destName||"").trim()) return;
+    (byKey[k] = byKey[k]||[]).push(t);
+  });
+  const hits = [];
+  Object.values(byKey).forEach(list => {
+    const leds = new Set(list.map(t => t.ledgerId));
+    if(leds.size > 1) hits.push(list);
+  });
+  return hits;
+}
+
+/* ══════════════════ ANIMATED ODOMETER COUNTER ══════════════════ */
+function renderOdometer(el, value, opts){
+  opts = opts||{};
+  const small = !!opts.small;
+  const txt = value==null ? "—.——" : Math.abs(r2(value)).toFixed(2);
+  const chars = (value==null?"":(value<0?"-":"")) + txt;
+  const want = chars.split("");
+  const prefix = value==null ? "" : "$";
+  if(el.dataset.len != want.length || el.dataset.small != String(small)){
+    el.innerHTML = "";
+    if(prefix){ const c=document.createElement("span"); c.className="cur"; c.textContent=prefix; el.appendChild(c); }
+    want.forEach(ch => {
+      if(/[0-9]/.test(ch)){
+        const d=document.createElement("span"); d.className="digit"+(small?" small":"");
+        const st=document.createElement("span"); st.className="strip";
+        for(let i=0;i<10;i++){ const s=document.createElement("span"); s.textContent=i; st.appendChild(s); }
+        d.appendChild(st); el.appendChild(d);
+      } else {
+        const s=document.createElement("span"); s.className="static"+(small?" small":""); s.textContent=ch; el.appendChild(s);
+      }
+    });
+    el.dataset.len = want.length; el.dataset.small = String(small);
+  }
+  const digits = el.querySelectorAll(".digit .strip");
+  const statics = el.querySelectorAll(".static");
+  let di=0, si=0;
+  want.forEach(ch => {
+    if(/[0-9]/.test(ch)){ di++; }
+    else { const s=statics[si++]; if(s) s.textContent = ch; }
+  });
+  di=0;
+  want.forEach(ch => { if(/[0-9]/.test(ch)){ const st=digits[di++]; if(st) st.style.transform = "translateY(-"+((+ch)*1.12)+"em)"; } });
+  if(value==null){ el.querySelectorAll(".digit .strip").forEach(s => s.style.transform="translateY(0em)"); }
+}
+
+/* ══════════════════ TOAST ══════════════════ */
+let toastT=null;
+function toast(msg, ms, actionLabel, action){
+  const old = $(".toast"); if(old) old.remove();
+  clearTimeout(toastT);
+  const d = document.createElement("div"); d.className="toast noprint";
+  d.innerHTML = "<span>"+msg+"</span>";
+  if(actionLabel){
+    const b=document.createElement("button"); b.className="btn sm"; b.textContent=actionLabel;
+    b.onclick = () => { d.remove(); action && action(); };
+    d.appendChild(b);
+  }
+  document.body.appendChild(d);
+  toastT = setTimeout(()=>d.remove(), ms||3200);
+}
+
+/* ══════════════════ ADD TRIP SCREEN ══════════════════ */
+let addMode = "odo";       // "odo" | "manual"
+let selectedLedgerId = null;
+let editingId = null;      // when set, Add screen is editing an existing trip
+
+function renderLedgerSeg(){
+  const box = $("#ledgerSeg"); box.innerHTML = "";
+  const live = DB.ledgers.filter(l => !l.archived);
+  live.forEach(l => {
+    const b = document.createElement("button");
+    b.type="button";
+    b.dataset.rc = (RATE_CLASSES[l.rateClass]||{}).css || "custom";
+    b.dataset.id = l.id;
+    if(l.id === selectedLedgerId) b.classList.add("on");
+    const rr = resolveRate(l, $("#fDate").value || todayISO());
+    b.innerHTML = "<span>"+esc(l.name)+"</span><span class='rc'>"+(rr? rr.cents.toFixed(1)+"¢" : "no rate")+"</span>";
+    b.onclick = () => {
+      selectedLedgerId = l.id;
+      DB.settings.lastLedgerId = l.id;
+      const fw = $("#fForWhom");
+      if(!fw.value || fw.dataset.auto==="1"){ fw.value = l.forWhomDefault || DB.settings.defaultPerson || ""; fw.dataset.auto="1"; }
+      save(); renderLedgerSeg(); updateLive();
+    };
+    box.appendChild(b);
+  });
+  if(!live.length) box.innerHTML = "<div class='tiny'>No projects yet — add one in Setup.</div>";
+}
+
+function collectForm(){
+  const led = ledgerById(selectedLedgerId);
+  const date = $("#fDate").value || todayISO();
+  const t = {
+    date,
+    odoStart: addMode==="odo" ? num($("#fOdoStart").value) : null,
+    odoEnd:   addMode==="odo" ? num($("#fOdoEnd").value)   : null,
+    milesManual: addMode==="manual" ? num($("#fMiles").value) : null,
+    roundTrip: $("#fRound").checked,
+    destName: $("#fDestName").value.trim(),
+    destAddress: $("#fDestAddr").value.trim(),
+    destLat: num($("#fLat").value), destLon: num($("#fLon").value),
+    purpose: $("#fPurpose").value.trim(),
+    forWhom: $("#fForWhom").value.trim(),
+    ledgerId: selectedLedgerId,
+    notes: $("#fNotes").value.trim(),
+    parking: num($("#fParking").value), tolls: num($("#fTolls").value), otherCost: num($("#fOther").value)
+  };
+  t.miles = computeMiles(t);
+  const rr = resolveRate(led, date);
+  t.rateCentsApplied = rr ? rr.cents : null;
+  const gp = gasPriceInUse();
+  t.gasPriceApplied = gp.price; t.mpgApplied = DB.settings.mpg;
+  return t;
+}
+
+function updateLive(){
+  const t = collectForm();
+  const amt = tripAmount(t);
+  renderOdometer($("#odoLive"), amt==null ? 0 : amt);
+  $("#odoLive").style.opacity = (t.miles==null || amt==null) ? ".34" : "1";
+  const led = ledgerById(selectedLedgerId);
+  const rr = resolveRate(led, t.date);
+  const bits = [];
+  if(t.miles!=null) bits.push("<b class='mono'>"+t.miles.toFixed(1)+"</b> mi");
+  if(rr) bits.push("× "+rr.cents.toFixed(1)+"¢ <span class='tiny'>("+esc(rr.label)+")</span>");
+  else if(led) bits.push("<span style='color:var(--warn)'>no verified rate for "+t.date+"</span>");
+  else bits.push("pick a project");
+  if(t.roundTrip && t.miles!=null) bits.push("<span class='tiny'>round trip</span>");
+  const costs = tripCosts(t);
+  if(costs>0) bits.push("+ "+money(costs)+" costs");
+  $("#liveSub").innerHTML = bits.join(" &nbsp;·&nbsp; ");
+
+  const fuel = fuelFor(t.miles, DB.settings.mpg, t.gasPriceApplied);
+  if(fuel!=null && amt!=null){
+    const spread = r2(amt - fuel);
+    const pct = fuel>0 ? Math.round((spread/fuel)*100) : 0;
+    $("#liveFuel").innerHTML = "est. fuel "+money(fuel)+" · spread <b>"+money(spread)+"</b> ("+(pct>=0?"+":"")+pct+"%) <span class='tiny'>— estimate, your info only</span>";
+  } else {
+    $("#liveFuel").innerHTML = DB.settings.mpg ? "" : "<span class='tiny'>set MPG + gas price in Setup for the fuel comparison</span>";
+  }
+
+  const w = validateTrip(t, editingId);
+  $("#addWarn").innerHTML = w.length ? warnHTML(w) : "";
+  $("#odoHint").innerHTML = (function(){
+    const lo = lastOdoEnd();
+    return lo!=null ? "Last recorded odometer: <b class='mono'>"+lo+"</b>" : "";
+  })();
+}
+
+function warnHTML(w){
+  const bad = w.filter(x=>x.level==="bad"), warn = w.filter(x=>x.level!=="bad");
+  let h = "";
+  if(bad.length)  h += "<div class='warnbox bad'><b>Fix before filing</b><ul>"+bad.map(x=>"<li>"+x.msg+"</li>").join("")+"</ul></div>";
+  if(warn.length) h += "<div class='warnbox'><b>Check these</b><ul>"+warn.map(x=>"<li>"+x.msg+"</li>").join("")+"</ul></div>";
+  return h;
+}
+
+function setMode(m){
+  addMode = m; DB.settings.lastMode = m; save();
+  $("#odoMode").classList.toggle("hidden", m!=="odo");
+  $("#manMode").classList.toggle("hidden", m!=="manual");
+  $("#toggleMode").textContent = m==="odo" ? "I didn't read the odometer" : "Use odometer instead";
+  if(m==="odo"){
+    $("#rtLabel").textContent = "Odometer covers one way only — double it";
+    $("#rtHint").innerHTML = "Leave this <b>off</b> if you read the odometer at home before you left and after you got back — that reading already includes the return drive.";
+    if(!editingId) $("#fRound").checked = false;
+  } else {
+    $("#rtLabel").textContent = "Round trip — double the miles entered";
+    $("#rtHint").innerHTML = "On: the number above is one way and gets doubled.";
+    if(!editingId) $("#fRound").checked = true;
+  }
+  updateLive();
+}
+
+function recentDests(){
+  const map = new Map();
+  tripsSorted().forEach(t => {
+    const n = (t.destName||"").trim(); if(!n) return;
+    const k = n.toLowerCase();
+    if(!map.has(k)) map.set(k, {name:n, address:t.destAddress||"", purpose:t.purpose||"", lat:t.destLat, lon:t.destLon, count:0, last:t.date});
+    const e = map.get(k); e.count++;
+    if(!e.address && t.destAddress) e.address = t.destAddress;
+    if(e.lat==null && t.destLat!=null){ e.lat=t.destLat; e.lon=t.destLon; }
+  });
+  const hidden = new Set(DB.settings.hiddenDests||[]);
+  return Array.from(map.values()).filter(d => !hidden.has(d.name.toLowerCase()))
+    .sort((a,b)=> b.count-a.count || (a.last<b.last?1:-1)).slice(0,8);
+}
+
+function renderChips(){
+  const box = $("#destChips"); const list = recentDests();
+  if(!list.length){ box.innerHTML = "<span class='tiny'>none yet — your first save starts the list</span>"; return; }
+  box.innerHTML = "";
+  list.forEach(d => {
+    const c = document.createElement("div"); c.className="chip";
+    c.textContent = d.name + (d.count>1 ? " ·"+d.count : "");
+    let timer=null, held=false;
+    const rm = () => {
+      held = true;
+      if(confirm("Remove “"+d.name+"” from the quick list? (Your logged trips are not touched.)")){
+        DB.settings.hiddenDests = (DB.settings.hiddenDests||[]).concat([d.name.toLowerCase()]);
+        save(); renderChips();
+      }
+    };
+    c.addEventListener("touchstart", ()=>{ held=false; timer=setTimeout(rm,600); }, {passive:true});
+    c.addEventListener("touchend", ()=>clearTimeout(timer));
+    c.addEventListener("touchmove", ()=>clearTimeout(timer), {passive:true});
+    c.addEventListener("contextmenu", e=>{ e.preventDefault(); rm(); });
+    c.onclick = () => {
+      if(held) return;
+      $("#fDestName").value = d.name;
+      $("#fDestAddr").value = d.address;
+      if(!$("#fPurpose").value) $("#fPurpose").value = d.purpose;
+      if(d.lat!=null){ $("#fLat").value = d.lat; $("#fLon").value = d.lon; }
+      updateLive();
+    };
+    box.appendChild(c);
+  });
+}
+
+function resetAddForm(){
+  editingId = null;
+  $("#fDate").value = todayISO();
+  $("#fOdoStart").value = lastOdoEnd()!=null ? lastOdoEnd() : "";
+  $("#fOdoEnd").value = ""; $("#fMiles").value = "";
+  $("#fDestName").value=""; $("#fDestAddr").value=""; $("#fPurpose").value="";
+  $("#fLat").value=""; $("#fLon").value="";
+  $("#fParking").value=""; $("#fTolls").value=""; $("#fOther").value="";
+  $("#fNotes").value="";
+  const led = ledgerById(selectedLedgerId);
+  $("#fForWhom").value = (led && led.forWhomDefault) || DB.settings.defaultPerson || "";
+  $("#fForWhom").dataset.auto = "1";
+  $("#btnSave").textContent = "Save trip";
+  setMode(DB.settings.lastMode || "odo");
+  renderChips(); renderLedgerSeg(); updateLive();
+}
+
+/* ── save / edit / delete with audit trail ───────────────────────── */
+const TRACKED = ["date","odoStart","odoEnd","milesManual","roundTrip","miles","destName","destAddress",
+  "destLat","destLon","purpose","forWhom","ledgerId","notes","parking","tolls","otherCost","rateCentsApplied"];
+
+function labelFor(field, val){
+  if(field==="ledgerId"){ const l=ledgerById(val); return l?l.name:(val||"—"); }
+  if(val===null||val===undefined||val==="") return "—";
+  return String(val);
+}
+
+function saveTrip(){
+  const form = collectForm();
+  if(!form.ledgerId){ toast("Pick a project first."); return; }
+  if(form.miles==null){ toast("Enter miles or both odometer readings."); return; }
+  const hard = validateTrip(form, editingId).filter(x=>x.level==="bad");
+  if(hard.length && !confirm(hard.map(x=>x.msg.replace(/<[^>]+>/g,"")).join("\n\n") + "\n\nSave anyway?")) return;
+
+  if(editingId){
+    const t = DB.trips.find(x=>x.id===editingId);
+    if(!t){ toast("That trip is gone."); resetAddForm(); return; }
+    const changes = [];
+    TRACKED.forEach(f => {
+      const oldV = t[f]===undefined?null:t[f], newV = form[f]===undefined?null:form[f];
+      if(String(oldV) !== String(newV)) changes.push({ts:nowISO(), field:f, old:labelFor(f,oldV), new:labelFor(f,newV)});
+    });
+    if(!changes.length){ toast("No changes."); resetAddForm(); goto("trips"); return; }
+    Object.assign(t, form);
+    t.updatedAt = nowISO();
+    t.changeLog = (t.changeLog||[]).concat(changes);
+    save(); toast(changes.length+" field"+(changes.length>1?"s":"")+" updated and logged.");
+  } else {
+    const t = Object.assign({
+      id: uuid(), createdAt: nowISO(), updatedAt: nowISO(), changeLog: []
+    }, form);
+    DB.trips.push(t);
+    DB.settings.tripsSinceExport = (DB.settings.tripsSinceExport||0) + 1;
+    save();
+    const amt = tripAmount(t);
+    toast("Saved · "+t.miles.toFixed(1)+" mi"+(amt!=null?" · "+money(amt):""));
+  }
+  resetAddForm(); renderAll();
+}
+
+function editTrip(id){
+  const t = DB.trips.find(x=>x.id===id); if(!t) return;
+  editingId = id; selectedLedgerId = t.ledgerId;
+  $("#fDate").value = t.date;
+  if(t.milesManual!=null){ addMode="manual"; }
+  else { addMode="odo"; }
+  setMode(addMode);
+  $("#fOdoStart").value = t.odoStart ?? ""; $("#fOdoEnd").value = t.odoEnd ?? "";
+  $("#fMiles").value = t.milesManual ?? "";
+  $("#fRound").checked = !!t.roundTrip;
+  $("#fDestName").value = t.destName||""; $("#fDestAddr").value = t.destAddress||"";
+  $("#fLat").value = t.destLat ?? ""; $("#fLon").value = t.destLon ?? "";
+  $("#fPurpose").value = t.purpose||""; $("#fForWhom").value = t.forWhom||"";
+  $("#fForWhom").dataset.auto = "0";
+  $("#fParking").value = t.parking ?? ""; $("#fTolls").value = t.tolls ?? ""; $("#fOther").value = t.otherCost ?? "";
+  $("#fNotes").value = t.notes||"";
+  $("#btnSave").textContent = "Update trip";
+  closeSheet(); goto("add"); renderLedgerSeg(); updateLive();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function deleteTrip(id){
+  const i = DB.trips.findIndex(x=>x.id===id); if(i<0) return;
+  const t = DB.trips[i];
+  t.deletedAt = nowISO();
+  t.changeLog = (t.changeLog||[]).concat([{ts:nowISO(), field:"__deleted", old:"active", new:"deleted"}]);
+  DB.deleted.push(t); DB.trips.splice(i,1); save();
+  closeSheet(); renderAll();
+  toast("Deleted — kept in the backup file.", 6000, "Undo", () => {
+    const j = DB.deleted.findIndex(x=>x.id===id); if(j<0) return;
+    const r = DB.deleted[j]; delete r.deletedAt;
+    r.changeLog = (r.changeLog||[]).concat([{ts:nowISO(), field:"__deleted", old:"deleted", new:"restored"}]);
+    DB.trips.push(r); DB.deleted.splice(j,1); save(); renderAll(); toast("Restored.");
+  });
+}
+function restoreTrip(id){
+  const j = DB.deleted.findIndex(x=>x.id===id); if(j<0) return;
+  const r = DB.deleted[j]; delete r.deletedAt;
+  r.changeLog = (r.changeLog||[]).concat([{ts:nowISO(), field:"__deleted", old:"deleted", new:"restored"}]);
+  DB.trips.push(r); DB.deleted.splice(j,1); save(); renderAll(); toast("Restored.");
+}
+
+/* ══════════════════ TRIP LIST ══════════════════ */
+function filterTrips(year, ledgerId, q){
+  q = (q||"").trim().toLowerCase();
+  return tripsSorted().filter(t => {
+    if(year && year!=="all" && yearOf(t.date)!==year) return false;
+    if(ledgerId && ledgerId!=="all" && t.ledgerId!==ledgerId) return false;
+    if(q){
+      const hay = [t.destName,t.destAddress,t.purpose,t.notes,t.forWhom].join(" ").toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+function tripRowHTML(t){
+  const led = ledgerById(t.ledgerId) || {name:"(deleted project)", rateClass:"custom"};
+  const rc = (RATE_CLASSES[led.rateClass]||{}).css || "custom";
+  const amt = tripAmount(t);
+  const [y,m,d] = t.date.split("-");
+  const flags = validateTrip(t, t.id);
+  return "<div class='trip"+(flags.length?" flag":"")+"' data-id='"+t.id+"'>"
+    + "<div class='d'><div class='dd'>"+(+d)+"</div><div class='mm'>"+MON[+m-1]+"</div></div>"
+    + "<div class='m'><div class='t1'>"+esc(t.destName||"(no destination)")+"</div>"
+    + "<div class='t2'>"+esc(t.purpose||"")+(t.purpose?" · ":"")+"<span class='badge' data-rc='"+rc+"'>"+esc(led.name)+"</span></div></div>"
+    + "<div class='r'><div class='amt'>"+(amt==null?"—":money(amt))+"</div>"
+    + "<div class='mi'>"+(t.miles==null?"—":t.miles.toFixed(1))+" mi</div></div></div>";
+}
+function renderTripList(){
+  const list = filterTrips($("#qYear").value, $("#qLedger").value, $("#qSearch").value);
+  const box = $("#tripList");
+  if(!list.length){ box.innerHTML = "<div class='card'><div class='mini'>No trips match.</div></div>"; return; }
+  let html = "", curMonth = "";
+  list.forEach(t => {
+    const mk = t.date.slice(0,7);
+    if(mk!==curMonth){
+      curMonth = mk;
+      const sub = list.filter(x=>x.date.slice(0,7)===mk);
+      const mi = r1(sub.reduce((s,x)=>s+(x.miles||0),0));
+      const am = r2(sub.reduce((s,x)=>s+(tripAmount(x)||0),0));
+      html += "<div class='month'>"+MON[+mk.slice(5,7)-1]+" "+mk.slice(0,4)+" · "+mi.toFixed(1)+" mi · "+money(am)+"</div>";
+    }
+    html += tripRowHTML(t);
+  });
+  const del = DB.deleted.filter(t => { const y=$("#qYear").value; return !y||y==="all"||yearOf(t.date)===y; });
+  if(del.length) html += "<div class='month'>Deleted ("+del.length+") — excluded from totals, kept in backups</div>"
+    + del.map(t => "<div class='trip' style='opacity:.55' data-del='"+t.id+"'>"
+        + "<div class='d'><div class='dd'>"+(+t.date.split("-")[2])+"</div><div class='mm'>"+MON[+t.date.split("-")[1]-1]+"</div></div>"
+        + "<div class='m'><div class='t1'>"+esc(t.destName||"(no destination)")+"</div><div class='t2'>deleted "+esc((t.deletedAt||"").slice(0,10))+"</div></div>"
+        + "<div class='r'><button class='btn sm'>Restore</button></div></div>").join("");
+  box.innerHTML = html;
+  box.querySelectorAll("[data-id]").forEach(el => el.onclick = () => openTrip(el.dataset.id));
+  box.querySelectorAll("[data-del]").forEach(el => el.querySelector("button").onclick = e => { e.stopPropagation(); restoreTrip(el.dataset.del); });
+}
+
+/* ── trip detail sheet ───────────────────────────────────────────── */
+function openSheet(html){ $("#sheetBody").innerHTML = html; $("#sheet").classList.add("on"); }
+function closeSheet(){ $("#sheet").classList.remove("on"); }
+$("#sheet") && ($("#sheet").onclick = e => { if(e.target.id==="sheet") closeSheet(); });
+
+function openTrip(id){
+  const t = DB.trips.find(x=>x.id===id); if(!t) return;
+  const led = ledgerById(t.ledgerId) || {name:"(deleted project)", rateClass:"custom"};
+  const amt = tripAmount(t), costs = tripCosts(t);
+  const fuel = fuelFor(t.miles, t.mpgApplied, t.gasPriceApplied);
+  const w = validateTrip(t, t.id);
+  let straight = null;
+  if(t.destLat!=null && DB.settings.homeLat!=null)
+    straight = r1(haversineMi(DB.settings.homeLat, DB.settings.homeLon, t.destLat, t.destLon));
+  let h = "<h1>"+esc(t.destName||"(no destination)")+"</h1>"
+    + "<div class='mini' style='margin-bottom:10px'>"+fmtDate(t.date)+" · <span class='badge' data-rc='"+((RATE_CLASSES[led.rateClass]||{}).css||"custom")+"'>"+esc(led.name)+"</span></div>";
+  if(w.length) h += warnHTML(w);
+  h += "<div class='card'>"
+    + kv("Miles", (t.miles==null?"—":t.miles.toFixed(1)+" mi"))
+    + kv("Rate applied", t.rateCentsApplied==null ? "— none" : t.rateCentsApplied.toFixed(1)+"¢/mi")
+    + kv("Mileage value", amt==null?"—":money(amt))
+    + (costs>0 ? kv("Out-of-pocket costs", money(costs)) : "")
+    + (costs>0 ? kv("Combined", money((amt||0)+costs)) : "")
+    + kv("How measured", t.milesManual!=null ? ("entered directly"+(t.roundTrip?" ×2 round trip":""))
+        : ("odometer "+(t.odoStart??"?")+" → "+(t.odoEnd??"?")+(t.roundTrip?" ×2":"")))
+    + kv("Purpose", esc(t.purpose||"—"))
+    + kv("For", esc(t.forWhom||"—"))
+    + kv("Address", esc(t.destAddress||"—"))
+    + (t.destLat!=null ? kv("Coordinates", t.destLat.toFixed(5)+", "+t.destLon.toFixed(5)) : "")
+    + (straight!=null ? kv("Straight-line from home", straight.toFixed(1)+" mi") : "")
+    + (t.notes ? kv("Notes", esc(t.notes)) : "")
+    + "</div>";
+  if(fuel!=null && amt!=null){
+    const sp = r2(amt-fuel);
+    h += "<div class='card'><h2>Fuel comparison</h2><div class='tiny' style='margin-bottom:6px'>Estimate for your information only. Never appears on a court or tax export.</div>"
+      + kv("Value at rate", money(amt)) + kv("Est. fuel cost", money(fuel))
+      + kv("Spread", money(sp)+" ("+(fuel>0?(sp>=0?"+":"")+Math.round(sp/fuel*100)+"%":"—")+")")
+      + kv("Assumptions", (t.mpgApplied||"?")+" mpg @ "+money(t.gasPriceApplied||0)+"/gal") + "</div>";
+  }
+  h += "<div class='card'><h2>Change history</h2>"
+    + "<div class='logline'>created "+esc(t.createdAt.replace("T"," ").slice(0,19))+"</div>"
+    + ((t.changeLog||[]).length
+        ? t.changeLog.slice().reverse().map(c => "<div class='logline'>"+esc(c.ts.replace("T"," ").slice(0,19))+" · <b>"+esc(c.field)+"</b>: "+esc(c.old)+" → "+esc(c.new)+"</div>").join("")
+        : "<div class='logline'>no edits since creation</div>")
+    + "</div>"
+    + "<div class='row'><button class='btn pri' id='shEdit'>Edit</button><button class='btn danger' id='shDel'>Delete</button></div>"
+    + "<div style='height:10px'></div><button class='btn wide ghost' id='shClose'>Close</button>";
+  openSheet(h);
+  $("#shEdit").onclick = () => editTrip(id);
+  $("#shDel").onclick  = () => { if(confirm("Delete this trip? It stays in your JSON backup and can be restored.")) deleteTrip(id); };
+  $("#shClose").onclick = closeSheet;
+}
+function kv(k,v){ return "<div class='kv'><span class='mini'>"+k+"</span><b>"+v+"</b></div>"; }
+
+/* ══════════════════ TOTALS ══════════════════ */
+function summarize(list){
+  const s = {n:list.length, miles:0, dollars:0, costs:0, missing:0, fuel:0, fuelKnown:0};
+  list.forEach(t => {
+    s.miles += t.miles||0;
+    s.dollars += tripAmount(t)||0;
+    s.costs += tripCosts(t);
+    const f = fuelFor(t.miles, t.mpgApplied, t.gasPriceApplied);
+    if(f!=null){ s.fuel += f; s.fuelKnown++; }
+    if(!t.ledgerId || !t.date || t.miles==null || t.rateCentsApplied==null || !t.destName || !t.purpose) s.missing++;
+  });
+  s.miles = r1(s.miles); s.dollars = r2(s.dollars); s.costs = r2(s.costs); s.fuel = r2(s.fuel);
+  s.combined = r2(s.dollars + s.costs);
+  return s;
+}
+function renderTotals(){
+  const year = $("#tYear").value, lid = $("#tLedger").value;
+  const list = filterTrips(year, lid, "");
+  const s = summarize(list);
+  renderOdometer($("#odoTotals"), s.dollars);
+  $("#totalsSub").innerHTML = "<b class='mono'>"+s.miles.toFixed(1)+"</b> mi across <b>"+s.n+"</b> trip"+(s.n===1?"":"s")
+    + (s.costs>0 ? " · +"+money(s.costs)+" costs → <b>"+money(s.combined)+"</b> combined" : "");
+
+  let wh = "";
+  const hits = doubleClaimScan(year==="all"?null:year);
+  if(hits.length){
+    wh += "<div class='warnbox bad'><b>⚠ Double-claim risk — "+hits.length+" date/destination"+(hits.length>1?"s":"")+"</b>"
+      + "<div style='margin-top:4px'>The same destination on the same date appears under more than one project. You must never claim the same mile as both a medical deduction and a conservator reimbursement.</div><ul>"
+      + hits.slice(0,12).map(g => "<li>"+fmtDate(g[0].date)+" — "+esc(g[0].destName)+": "
+          + g.map(t => esc((ledgerById(t.ledgerId)||{name:"?"}).name)+" ("+(t.miles||0).toFixed(1)+" mi)").join(" + ")
+          + "</li>").join("")
+      + "</ul></div>";
+  }
+  if(s.missing) wh += "<div class='warnbox'><b>"+s.missing+" trip"+(s.missing>1?"s are":" is")+" missing required fields</b>"
+    + " <button class='btn sm' id='goMissing' style='margin-left:6px'>Show them</button></div>";
+  $("#totalsWarn").innerHTML = wh;
+  const gm = $("#goMissing");
+  if(gm) gm.onclick = () => {
+    $("#qYear").value = year; $("#qLedger").value = lid; $("#qSearch").value = "";
+    goto("trips"); renderTripList();
+    toast("Flagged trips have an amber border.", 4000);
+  };
+
+  /* per-project breakdown */
+  let h = "<div class='card'><h2>By project</h2>";
+  const leds = (lid==="all" ? DB.ledgers : DB.ledgers.filter(l=>l.id===lid));
+  leds.forEach(l => {
+    const sub = list.filter(t=>t.ledgerId===l.id);
+    if(!sub.length) return;
+    const ss = summarize(sub);
+    const rc = (RATE_CLASSES[l.rateClass]||{}).css||"custom";
+    h += "<div style='margin:12px 0 4px'><span class='badge' data-rc='"+rc+"'>"+esc(l.name)+"</span> "
+       + "<span class='tiny'>"+esc((RATE_CLASSES[l.rateClass]||{}).label||l.rateClass)+"</span></div>"
+       + kv("Trips", ss.n) + kv("Miles", ss.miles.toFixed(1))
+       + kv("Mileage value", money(ss.dollars))
+       + kv("Out-of-pocket", money(ss.costs))
+       + kv("Combined", money(ss.combined));
+  });
+  const orphan = list.filter(t => !ledgerById(t.ledgerId));
+  if(orphan.length){ const os = summarize(orphan); h += "<div style='margin:12px 0 4px'><span class='badge' data-rc='custom'>Unassigned</span></div>"+kv("Trips",os.n)+kv("Miles",os.miles.toFixed(1))+kv("Value",money(os.dollars)); }
+  h += "</div>";
+
+  /* month by month */
+  if(year!=="all"){
+    h += "<div class='card'><h2>Month by month — "+year+"</h2><table class='rt'><thead><tr><th>Month</th><th>Trips</th><th>Miles</th><th>Value</th><th>Costs</th></tr></thead><tbody>";
+    for(let m=1;m<=12;m++){
+      const mk = year+"-"+String(m).padStart(2,"0");
+      const sub = list.filter(t=>t.date.slice(0,7)===mk);
+      if(!sub.length) continue;
+      const ss = summarize(sub);
+      h += "<tr><td>"+MON[m-1]+"</td><td class='mono'>"+ss.n+"</td><td class='mono'>"+ss.miles.toFixed(1)+"</td><td class='mono'>"+money(ss.dollars)+"</td><td class='mono'>"+(ss.costs?money(ss.costs):"—")+"</td></tr>";
+    }
+    h += "<tr style='font-weight:800'><td>Total</td><td class='mono'>"+s.n+"</td><td class='mono'>"+s.miles.toFixed(1)+"</td><td class='mono'>"+money(s.dollars)+"</td><td class='mono'>"+(s.costs?money(s.costs):"—")+"</td></tr>";
+    h += "</tbody></table></div>";
+  }
+
+  /* fuel comparison */
+  const gp = gasPriceInUse();
+  h += "<div class='card'><h2>Fuel comparison</h2>"
+    + "<div class='tiny' style='margin-bottom:8px'>Estimate for your own information only. This block never appears on a court or tax export.</div>";
+  if(!DB.settings.mpg || gp.price==null){
+    h += "<div class='mini'>Set vehicle MPG and a gas price (or log fill-ups) in Setup to see this.</div>";
+  } else {
+    const sp = r2(s.dollars - s.fuel);
+    h += kv("Gas price in use", money(gp.price)+"/gal <span class='tiny'>("+gp.src+")</span>")
+      + kv("Vehicle MPG", DB.settings.mpg)
+      + kv("Value at rate", money(s.dollars))
+      + kv("Est. fuel cost", money(s.fuel))
+      + kv("Spread", "<span style='color:"+(sp>=0?"var(--acc2)":"var(--bad)")+"'>"+money(sp)+" ("+(s.fuel>0?(sp>=0?"+":"")+Math.round(sp/s.fuel*100)+"%":"—")+")</span>")
+      + (s.fuelKnown<s.n ? "<div class='tiny' style='margin-top:6px'>"+(s.n-s.fuelKnown)+" trip(s) had no MPG/gas snapshot and are excluded from the fuel figure.</div>" : "");
+  }
+  h += "</div>";
+  $("#totalsBody").innerHTML = h;
+}
+
+/* ══════════════════ OFFLINE TRIP MAP ══════════════════ */
+function mapPoints(year, lid){
+  const list = filterTrips(year, lid, "").filter(t => t.destLat!=null && t.destLon!=null);
+  const byKey = new Map();
+  list.forEach(t => {
+    const k = (t.destName||"").trim().toLowerCase() || (t.destLat.toFixed(4)+","+t.destLon.toFixed(4));
+    if(!byKey.has(k)) byKey.set(k, {name:t.destName||"(unnamed)", lat:t.destLat, lon:t.destLon, trips:[], miles:0, dollars:0});
+    const e = byKey.get(k);
+    e.trips.push(t); e.miles += t.miles||0; e.dollars += tripAmount(t)||0;
+  });
+  return {list, pts: Array.from(byKey.values())};
+}
+function renderMap(){
+  const year = $("#mYear").value, lid = $("#mLedger").value;
+  const {list, pts} = mapPoints(year, lid);
+  const home = (DB.settings.homeLat!=null && DB.settings.homeLon!=null)
+    ? {lat:DB.settings.homeLat, lon:DB.settings.homeLon, name:DB.settings.homeLabel||"Home"} : null;
+
+  if(!pts.length){
+    $("#mapBox").innerHTML = "<div style='padding:26px 16px;text-align:center' class='mini'>"
+      + "No trips in this filter have coordinates yet.<br><br>Tap <b>Use my location</b> on the Add Trip screen when you park — iPhone GPS works with no signal and no data.<br><br>"
+      + (home?"":"Also set your <b>home coordinates</b> in Setup so routes have a starting point.")
+      + "</div>";
+    $("#mapLegend").innerHTML=""; $("#mapStats").innerHTML=""; return;
+  }
+
+  const all = pts.map(p=>({lat:p.lat,lon:p.lon})).concat(home?[home]:[]);
+  let minLa=Math.min(...all.map(p=>p.lat)), maxLa=Math.max(...all.map(p=>p.lat));
+  let minLo=Math.min(...all.map(p=>p.lon)), maxLo=Math.max(...all.map(p=>p.lon));
+  const midLa = (minLa+maxLa)/2, kx = Math.cos(midLa*Math.PI/180);
+  let spanLa = Math.max(maxLa-minLa, 0.02), spanLo = Math.max(maxLo-minLo, 0.02/Math.max(kx,.1));
+  const padLa = spanLa*0.18, padLo = spanLo*0.18;
+  minLa-=padLa; maxLa+=padLa; minLo-=padLo; maxLo+=padLo;
+
+  const W=740, H=520, M=26;
+  const X = lo => M + ((lo-minLo)/(maxLo-minLo))*(W-2*M);
+  const Y = la => M + ((maxLa-la)/(maxLa-minLa))*(H-2*M);
+
+  let g = "";
+  /* graticule */
+  const step = (function(sp){ const c=[.05,.1,.25,.5,1,2,5]; for(const v of c) if(sp/v<=6) return v; return 10; })(Math.max(maxLa-minLa, maxLo-minLo));
+  for(let la=Math.ceil(minLa/step)*step; la<=maxLa; la+=step){
+    g += "<line x1='"+M+"' y1='"+Y(la).toFixed(1)+"' x2='"+(W-M)+"' y2='"+Y(la).toFixed(1)+"' stroke='#22304f' stroke-width='1' stroke-dasharray='3 5'/>"
+      +  "<text x='"+(M+3)+"' y='"+(Y(la)-4).toFixed(1)+"' fill='#4b5c86' font-size='9'>"+la.toFixed(2)+"°N</text>";
+  }
+  for(let lo=Math.ceil(minLo/step)*step; lo<=maxLo; lo+=step){
+    g += "<line x1='"+X(lo).toFixed(1)+"' y1='"+M+"' x2='"+X(lo).toFixed(1)+"' y2='"+(H-M)+"' stroke='#22304f' stroke-width='1' stroke-dasharray='3 5'/>"
+      +  "<text x='"+(X(lo)+3).toFixed(1)+"' y='"+(H-M-4)+"' fill='#4b5c86' font-size='9'>"+lo.toFixed(2)+"°</text>";
+  }
+  /* routes */
+  if(home){
+    pts.forEach(p => {
+      const wgt = Math.min(5, 1 + p.trips.length*0.6);
+      g += "<line x1='"+X(home.lon).toFixed(1)+"' y1='"+Y(home.lat).toFixed(1)+"' x2='"+X(p.lon).toFixed(1)+"' y2='"+Y(p.lat).toFixed(1)
+        + "' stroke='#5b8cff' stroke-opacity='.5' stroke-width='"+wgt.toFixed(1)+"' stroke-linecap='round'/>";
+    });
+  }
+  /* destination pins */
+  pts.sort((a,b)=>b.trips.length-a.trips.length).forEach((p,i) => {
+    const r = Math.min(17, 7 + p.trips.length*1.6);
+    const rc = (RATE_CLASSES[(ledgerById(p.trips[0].ledgerId)||{}).rateClass]||{}).css || "custom";
+    const col = {medical:"#3ad1a5", business:"#5b8cff", charitable:"#c084fc", custom:"#ffb020"}[rc];
+    g += "<circle cx='"+X(p.lon).toFixed(1)+"' cy='"+Y(p.lat).toFixed(1)+"' r='"+r.toFixed(1)+"' fill='"+col+"' fill-opacity='.22' stroke='"+col+"' stroke-width='2'/>"
+      +  "<text x='"+X(p.lon).toFixed(1)+"' y='"+(Y(p.lat)+3.5).toFixed(1)+"' text-anchor='middle' fill='"+col+"' font-size='11' font-weight='700'>"+p.trips.length+"</text>";
+    if(i<10){
+      const ly = (Y(p.lat)-r-6).toFixed(1), lx = X(p.lon).toFixed(1), nm = esc(p.name.slice(0,26));
+      g += "<text x='"+lx+"' y='"+ly+"' text-anchor='middle' font-size='11' font-weight='700' fill='#0e1526' stroke='#0e1526' stroke-width='4' stroke-linejoin='round'>"+nm+"</text>"
+         + "<text x='"+lx+"' y='"+ly+"' text-anchor='middle' font-size='11' font-weight='700' fill='#cdd8f5'>"+nm+"</text>";
+    }
+  });
+  /* home */
+  if(home){
+    const hx=X(home.lon).toFixed(1), hy=Y(home.lat).toFixed(1);
+    g += "<path d='M"+hx+" "+(+hy-13)+" l11 11 h-4 v10 h-14 v-10 h-4 z' fill='#ffb020' stroke='#0b1020' stroke-width='1.5'/>"
+      +  "<text x='"+hx+"' y='"+(+hy+22)+"' text-anchor='middle' fill='#ffd98a' font-size='11' font-weight='700'>"+esc(home.name)+"</text>";
+  }
+  /* scale bar */
+  const milesAcross = haversineMi(midLa, minLo, midLa, maxLo);
+  const nice = [1,2,5,10,20,25,50,100,200,500].filter(v=>v<=milesAcross/2.4).pop() || r1(milesAcross/3);
+  const px = (nice/milesAcross)*(W-2*M);
+  g += "<g transform='translate("+(W-M-px-6)+","+(H-M-14)+")'>"
+    + "<line x1='0' y1='0' x2='"+px.toFixed(1)+"' y2='0' stroke='#93a0c4' stroke-width='2.5'/>"
+    + "<line x1='0' y1='-5' x2='0' y2='5' stroke='#93a0c4' stroke-width='2.5'/>"
+    + "<line x1='"+px.toFixed(1)+"' y1='-5' x2='"+px.toFixed(1)+"' y2='5' stroke='#93a0c4' stroke-width='2.5'/>"
+    + "<text x='"+(px/2).toFixed(1)+"' y='-9' text-anchor='middle' fill='#93a0c4' font-size='10.5' font-weight='700'>"+nice+" mi</text></g>";
+  /* north arrow */
+  g += "<g transform='translate("+(W-M-16)+","+(M+6)+")'><path d='M0 -13 L6 8 L0 3 L-6 8 Z' fill='#93a0c4'/>"
+    + "<text x='0' y='21' text-anchor='middle' fill='#93a0c4' font-size='10' font-weight='800'>N</text></g>";
+
+  $("#mapBox").innerHTML = "<svg viewBox='0 0 "+W+" "+H+"' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Trip map'>"
+    + "<rect width='"+W+"' height='"+H+"' fill='#0e1526'/>" + g + "</svg>";
+
+  $("#mapLegend").innerHTML = "<div class='tiny' style='margin-top:8px'>Drawn from GPS coordinates stored on this device. "
+    + "No map tiles, no basemap service, no network — the grid lines are true latitude/longitude, and the bar is a real distance scale. "
+    + "Circle size and the number inside = how many trips to that destination.</div>";
+
+  /* stats */
+  let sh = "<div class='card'><h2>Distance check</h2><div class='tiny' style='margin-bottom:8px'>Straight-line distance from home vs. the miles you logged. Big gaps are worth a look before you file.</div><table class='rt'><thead><tr><th>Destination</th><th>Trips</th><th>Straight</th><th>Avg logged</th></tr></thead><tbody>";
+  pts.forEach(p => {
+    const straight = home ? r1(haversineMi(home.lat, home.lon, p.lat, p.lon)) : null;
+    const avg = r1(p.miles / p.trips.length);
+    const flag = (straight!=null && straight>1 && avg > straight*2.6);
+    sh += "<tr"+(flag?" style='color:#ffd98a'":"")+"><td>"+esc(p.name)+"</td><td class='mono'>"+p.trips.length+"</td>"
+      + "<td class='mono'>"+(straight==null?"—":straight.toFixed(1))+"</td><td class='mono'>"+avg.toFixed(1)+"</td></tr>";
+  });
+  sh += "</tbody></table>";
+  if(!home) sh += "<div class='tiny' style='margin-top:8px'>Set home coordinates in Setup to enable this check.</div>";
+  const noCoord = filterTrips(year,lid,"").length - list.length;
+  if(noCoord>0) sh += "<div class='tiny' style='margin-top:8px'>"+noCoord+" trip(s) in this filter have no coordinates and are not on the map.</div>";
+  sh += "<div style='height:10px'></div><button class='btn wide noprint' id='btnPrintMap'>Print / save this map</button></div>";
+  $("#mapStats").innerHTML = sh;
+  $("#btnPrintMap").onclick = () => printMap(year, lid);
+}
+
+/* ══════════════════ SETTINGS ══════════════════ */
+function renderSettings(){
+  const gp = gasPriceInUse();
+  let h = "";
+
+  /* projects */
+  h += "<div class='card'><h2>Projects / ledgers</h2>"
+    + "<div class='tiny' style='margin-bottom:8px'>Each project carries its own mileage rate class. Add one per job, per client, or per purpose.</div>"
+    + "<table class='rt'><thead><tr><th>Name</th><th>Rate class</th><th>Default person</th><th></th></tr></thead><tbody>";
+  DB.ledgers.forEach(l => {
+    const n = DB.trips.filter(t=>t.ledgerId===l.id).length;
+    h += "<tr"+(l.archived?" style='opacity:.5'":"")+"><td>"+esc(l.name)+"<div class='tiny'>"+n+" trip"+(n===1?"":"s")+(l.archived?" · archived":"")+"</div></td>"
+      + "<td>"+esc((RATE_CLASSES[l.rateClass]||{}).label||l.rateClass)+(l.rateClass==="custom"&&l.customRateCents!=null?" "+l.customRateCents+"¢":"")+"</td>"
+      + "<td class='tiny'>"+esc(l.forWhomDefault||"—")+"</td>"
+      + "<td class='nowrap'><button class='btn sm' data-edled='"+l.id+"'>Edit</button></td></tr>";
+  });
+  h += "</tbody></table><div style='height:10px'></div><button class='btn wide' id='addLedger'>+ Add project</button></div>";
+
+  /* rate table */
+  h += "<div class='card'><h2>Rate table</h2>"
+    + "<div class='tiny' style='margin-bottom:8px'>Rates apply by <b>effective date</b>, not by calendar year — the IRS changed the 2026 rates mid-year. A trip always uses the rate in force on its trip date, and that number is frozen onto the record when you save.</div>"
+    + "<table class='rt'><thead><tr><th>Class</th><th>Effective</th><th>¢/mi</th><th>Verified</th></tr></thead><tbody>";
+  DB.rates.slice().sort((a,b)=> a.rateClass===b.rateClass ? (a.effectiveFrom<b.effectiveFrom?-1:1) : (a.rateClass<b.rateClass?-1:1))
+    .forEach(r => {
+      const stale = r.verifiedOn && ((Date.now()-Date.parse(r.verifiedOn))/86400000 > 365);
+      h += "<tr><td>"+esc((RATE_CLASSES[r.rateClass]||{}).label||r.rateClass)+"<div class='tiny'>"+esc(r.source||"")+"</div></td>"
+        + "<td class='mono'>"+r.effectiveFrom+"</td>"
+        + "<td><input class='mono' style='max-width:74px' data-rate='"+r.id+"' value='"+r.cents+"' inputmode='decimal'></td>"
+        + "<td class='tiny'><input type='date' data-rvd='"+r.id+"' value='"+(r.verifiedOn||"")+"' style='padding:5px;font-size:12px'>"
+        + (stale?"<div style='color:var(--warn)'>stale</div>":"")+"</td></tr>";
+    });
+  h += "</tbody></table>"
+    + "<div style='height:10px'></div><div class='row'><button class='btn' id='addRate'>+ Add rate period</button><button class='btn' id='recalcBtn'>Recalculate trips…</button></div>"
+    + "<div class='warnbox' style='margin-top:10px'>Editing a rate here does <b>not</b> touch trips you already saved. That is deliberate — your records must show the rate that was in effect when the trip happened. Use <b>Recalculate</b> only when you mean to restate a period, and it will tell you exactly how many records change and log every one.</div>"
+    + "</div>";
+
+  /* vehicle + fuel */
+  h += "<div class='card'><h2>Vehicle &amp; fuel</h2>"
+    + "<div class='row'><div><label>Vehicle MPG</label><input inputmode='decimal' id='sMpg' value='"+(DB.settings.mpg??"")+"' placeholder='e.g. 22'></div>"
+    + "<div><label>Gas price $/gal</label><input inputmode='decimal' id='sGas' value='"+(DB.settings.gasPrice??"")+"' placeholder='e.g. 3.29'></div></div>"
+    + "<div class='mini' style='margin-top:8px'>In use: <b>"+(gp.price==null?"none":money(gp.price)+"/gal")+"</b> <span class='tiny'>("+gp.src+")</span></div>"
+    + "<div style='height:12px'></div><h3 style='font-size:13px;color:var(--dim)'>Fill-ups</h3>"
+    + "<div class='row'><div><input type='date' id='fuDate' value='"+todayISO()+"'></div><div><input inputmode='decimal' id='fuGal' placeholder='gallons'></div><div><input inputmode='decimal' id='fuTot' placeholder='total $'></div></div>"
+    + "<div style='height:8px'></div><button class='btn wide' id='addFill'>Log fill-up</button>";
+  if(DB.fillups.length){
+    h += "<table class='rt' style='margin-top:10px'><thead><tr><th>Date</th><th>Gal</th><th>Total</th><th>$/gal</th><th></th></tr></thead><tbody>";
+    DB.fillups.slice().sort((a,b)=>a.date<b.date?1:-1).slice(0,12).forEach(f => {
+      h += "<tr><td class='mono'>"+f.date+"</td><td class='mono'>"+f.gallons+"</td><td class='mono'>"+money(f.total)+"</td>"
+        + "<td class='mono'>"+money(f.total/f.gallons)+"</td><td><button class='btn sm danger' data-delfu='"+f.id+"'>×</button></td></tr>";
+    });
+    h += "</tbody></table>";
+  }
+  h += "</div>";
+
+  /* defaults + home */
+  h += "<div class='card'><h2>Defaults</h2>"
+    + "<div class='field'><label>Default person (\"for whom\")</label><input id='sPerson' value='"+esc(DB.settings.defaultPerson||"")+"'></div>"
+    + "<div class='field'><label>Default project</label><select id='sLed'>"
+    + DB.ledgers.filter(l=>!l.archived).map(l=>"<option value='"+l.id+"'"+(l.id===DB.settings.lastLedgerId?" selected":"")+">"+esc(l.name)+"</option>").join("")
+    + "</select></div>"
+    + "<div class='field'><label>Home label (map)</label><input id='sHomeLabel' value='"+esc(DB.settings.homeLabel||"Home")+"'></div>"
+    + "<div class='field'><label>Home coordinates</label><div class='row'>"
+    + "<div><input inputmode='decimal' id='sHomeLat' value='"+(DB.settings.homeLat??"")+"' placeholder='latitude'></div>"
+    + "<div><input inputmode='decimal' id='sHomeLon' value='"+(DB.settings.homeLon??"")+"' placeholder='longitude'></div></div>"
+    + "<div style='height:8px'></div><button class='btn' id='homeGps'>Set home from my current location</button></div>"
+    + "<button class='btn pri wide' id='saveSet'>Save settings</button></div>";
+
+  /* exports */
+  const last = DB.settings.lastExportAt;
+  h += "<div class='card'><h2>Backup &amp; export</h2>"
+    + "<div class='mini' style='margin-bottom:10px'>Last export: <b>"+(last? fmtDate(last.slice(0,10))+" ("+daysSince(last)+" days ago)" : "never")+"</b> · "
+    + (DB.settings.tripsSinceExport||0)+" trip(s) added since.</div>"
+    + "<div class='row'><div><label>Year</label><select id='xYear'></select></div><div><label>Project</label><select id='xLedger'></select></div></div>"
+    + "<div style='height:10px'></div>"
+    + "<button class='btn wide' id='xCsv'>Export CSV (filtered)</button><div style='height:8px'></div>"
+    + "<button class='btn wide' id='xReport'>Printable court / tax report</button><div style='height:8px'></div>"
+    + "<button class='btn pri wide' id='xJson'>Full JSON backup (everything)</button><div style='height:8px'></div>"
+    + "<button class='btn wide' id='xImport'>Restore from JSON backup…</button>"
+    + "<input type='file' id='fileImport' accept='.json,application/json' class='hidden'>"
+    + "<div class='warnbox' style='margin-top:12px'>iOS Safari can evict a website's stored data if you don't open it for a while. <b>An un-exported record is a record at risk.</b> Export the JSON backup at least monthly and keep it with your court file.</div>"
+    + "</div>";
+
+  /* danger */
+  h += "<div class='card'><h2>Maintenance</h2>"
+    + "<div class='mini'>"+DB.trips.length+" active · "+DB.deleted.length+" deleted · "+DB.ledgers.length+" projects · "+DB.rates.length+" rate periods</div>"
+    + "<div style='height:10px'></div><button class='btn wide' id='viewSys'>View system log ("+DB.systemLog.length+")</button>"
+    + "<div style='height:8px'></div><button class='btn danger wide' id='wipe'>Erase all data on this device</button></div>"
+    + "<div style='height:20px'></div>";
+
+  $("#setBody").innerHTML = h;
+  wireSettings();
+}
+function daysSince(iso){ return Math.floor((Date.now()-Date.parse(iso))/86400000); }
+
+function wireSettings(){
+  $$("[data-edled]").forEach(b => b.onclick = () => editLedger(b.dataset.edled));
+  $("#addLedger").onclick = () => editLedger(null);
+  $$("[data-rate]").forEach(inp => inp.onchange = () => {
+    const r = DB.rates.find(x=>x.id===inp.dataset.rate); if(!r) return;
+    const v = num(inp.value); if(v==null || v<0){ inp.value=r.cents; return; }
+    if(v===r.cents) return;
+    sysLog("rate_edit", (RATE_CLASSES[r.rateClass]||{}).label+" from "+r.effectiveFrom+": "+r.cents+"¢ → "+v+"¢");
+    r.cents = v; r.verifiedOn = todayISO(); save(); renderSettings(); renderAll();
+    toast("Rate updated. Past trips unchanged — use Recalculate to restate them.", 5500);
+  });
+  $$("[data-rvd]").forEach(inp => inp.onchange = () => {
+    const r = DB.rates.find(x=>x.id===inp.dataset.rvd); if(r){ r.verifiedOn = inp.value; save(); }
+  });
+  $("#addRate").onclick = addRatePeriod;
+  $("#recalcBtn").onclick = openRecalc;
+  $("#addFill").onclick = () => {
+    const g = num($("#fuGal").value), t = num($("#fuTot").value), d = $("#fuDate").value;
+    if(!g || !t || !d){ toast("Need date, gallons and total."); return; }
+    DB.fillups.push({id:uuid(), date:d, gallons:g, total:t, createdAt:nowISO()});
+    sysLog("fillup", d+": "+g+" gal / "+money(t)); save(); renderSettings(); toast("Fill-up logged.");
+  };
+  $$("[data-delfu]").forEach(b => b.onclick = () => {
+    const i = DB.fillups.findIndex(x=>x.id===b.dataset.delfu);
+    if(i>=0){ DB.fillups.splice(i,1); save(); renderSettings(); }
+  });
+  $("#homeGps").onclick = () => grabGPS((lat,lon) => {
+    $("#sHomeLat").value = lat.toFixed(6); $("#sHomeLon").value = lon.toFixed(6); toast("Home coordinates captured.");
+  });
+  $("#saveSet").onclick = () => {
+    DB.settings.mpg = num($("#sMpg").value);
+    DB.settings.gasPrice = num($("#sGas").value);
+    DB.settings.defaultPerson = $("#sPerson").value.trim();
+    DB.settings.lastLedgerId = $("#sLed").value || DB.settings.lastLedgerId;
+    DB.settings.homeLabel = $("#sHomeLabel").value.trim() || "Home";
+    DB.settings.homeLat = num($("#sHomeLat").value);
+    DB.settings.homeLon = num($("#sHomeLon").value);
+    selectedLedgerId = DB.settings.lastLedgerId;
+    sysLog("settings_save",""); save(); renderAll(); renderSettings(); toast("Settings saved.");
+  };
+  fillSelect($("#xYear"), true); fillLedgerSelect($("#xLedger"), true);
+  $("#xCsv").onclick    = () => exportCSV($("#xYear").value, $("#xLedger").value);
+  $("#xJson").onclick   = () => exportJSON();
+  $("#xReport").onclick = () => buildReport($("#xYear").value, $("#xLedger").value);
+  $("#xImport").onclick = () => $("#fileImport").click();
+  $("#fileImport").onchange = e => { const f=e.target.files[0]; if(f) importJSON(f); e.target.value=""; };
+  $("#viewSys").onclick = () => openSheet("<h1>System log</h1><div class='card'>"
+    + (DB.systemLog.length ? DB.systemLog.slice().reverse().map(l=>"<div class='logline'>"+esc(l.ts.replace('T',' ').slice(0,19))+" · <b>"+esc(l.kind)+"</b> "+esc(l.detail||"")+"</div>").join("") : "<div class='mini'>empty</div>")
+    + "</div><button class='btn wide' onclick=\"document.getElementById('sheet').classList.remove('on')\">Close</button>");
+  $("#wipe").onclick = () => {
+    if(!confirm("Erase EVERY trip, project and setting on this device?\n\nThis cannot be undone. Export a JSON backup first.")) return;
+    if(!confirm("Last chance. Really erase everything?")) return;
+    localStorage.removeItem(KEY); load(); selectedLedgerId = DB.ledgers[0].id; renderAll(); renderSettings(); toast("Erased.");
+  };
+}
+
+function editLedger(id){
+  const l = id ? ledgerById(id) : {id:null, name:"", rateClass:"business", customRateCents:null, forWhomDefault:DB.settings.defaultPerson||"", archived:false};
+  const n = id ? DB.trips.filter(t=>t.ledgerId===id).length : 0;
+  openSheet("<h1>"+(id?"Edit project":"New project")+"</h1>"
+    + "<div class='card'>"
+    + "<div class='field'><label>Project name</label><input id='lgName' value='"+esc(l.name)+"' placeholder='e.g. Smith fence job'></div>"
+    + "<div class='field'><label>Rate class</label><select id='lgClass'>"
+      + Object.keys(RATE_CLASSES).map(k=>"<option value='"+k+"'"+(k===l.rateClass?" selected":"")+">"+RATE_CLASSES[k].label+"</option>").join("")
+    + "</select><div class='tiny' style='margin-top:6px'>Which published rate this project bills at. Pick <b>Custom</b> to type your own cents/mile.</div></div>"
+    + "<div class='field' id='lgCustWrap'><label>Custom rate ¢/mi</label><input inputmode='decimal' id='lgCust' value='"+(l.customRateCents??"")+"'></div>"
+    + "<div class='field'><label>Default \"for whom\"</label><input id='lgWho' value='"+esc(l.forWhomDefault||"")+"'></div>"
+    + (id ? "<div class='field'><label class='spread' style='cursor:pointer'><span>Archived (hidden from Add screen)</span><input type='checkbox' id='lgArch' "+(l.archived?"checked":"")+" style='width:auto;transform:scale(1.3)'></label></div>" : "")
+    + (id && n ? "<div class='tiny'>"+n+" trip(s) use this project. Renaming is safe; the trips follow.</div>" : "")
+    + "</div>"
+    + "<div class='row'><button class='btn pri' id='lgSave'>Save</button><button class='btn ghost' id='lgCancel'>Cancel</button></div>"
+    + (id && !n ? "<div style='height:10px'></div><button class='btn danger wide' id='lgDel'>Delete this project</button>" : ""));
+  const syncCust = () => $("#lgCustWrap").classList.toggle("hidden", $("#lgClass").value!=="custom");
+  $("#lgClass").onchange = syncCust; syncCust();
+  $("#lgCancel").onclick = closeSheet;
+  $("#lgSave").onclick = () => {
+    const name = $("#lgName").value.trim();
+    if(!name){ toast("Name it."); return; }
+    const rc = $("#lgClass").value, cust = num($("#lgCust").value);
+    if(rc==="custom" && cust==null){ toast("Custom needs a cents-per-mile figure."); return; }
+    if(id){
+      const t = ledgerById(id);
+      sysLog("project_edit", t.name+" → "+name+" ("+rc+")");
+      t.name=name; t.rateClass=rc; t.customRateCents=cust; t.forWhomDefault=$("#lgWho").value.trim();
+      t.archived = $("#lgArch") ? $("#lgArch").checked : false;
+    } else {
+      const nl = {id:uuid(), name, rateClass:rc, customRateCents:cust, forWhomDefault:$("#lgWho").value.trim(), archived:false, createdAt:nowISO()};
+      DB.ledgers.push(nl); selectedLedgerId = nl.id; DB.settings.lastLedgerId = nl.id;
+      sysLog("project_add", name+" ("+rc+")");
+    }
+    save(); closeSheet(); renderAll(); renderSettings(); toast("Saved.");
+  };
+  const dl = $("#lgDel");
+  if(dl) dl.onclick = () => {
+    if(!confirm("Delete “"+l.name+"”?")) return;
+    DB.ledgers = DB.ledgers.filter(x=>x.id!==id);
+    if(selectedLedgerId===id) selectedLedgerId = (DB.ledgers[0]||{}).id||null;
+    sysLog("project_delete", l.name); save(); closeSheet(); renderAll(); renderSettings();
+  };
+}
+
+function addRatePeriod(){
+  openSheet("<h1>Add rate period</h1><div class='card'>"
+    + "<div class='field'><label>Rate class</label><select id='nrClass'>"
+      + Object.keys(RATE_CLASSES).filter(k=>k!=="custom").map(k=>"<option value='"+k+"'>"+RATE_CLASSES[k].label+"</option>").join("")
+    + "</select></div>"
+    + "<div class='field'><label>Effective from</label><input type='date' id='nrFrom' value='"+todayISO()+"'></div>"
+    + "<div class='field'><label>Cents per mile</label><input inputmode='decimal' id='nrCents' placeholder='e.g. 76'></div>"
+    + "<div class='field'><label>Source (required — never invent a rate)</label><input id='nrSrc' placeholder='e.g. IRS Notice 2027-XX'></div>"
+    + "<div class='field'><label>Source URL</label><input id='nrUrl' placeholder='https://www.irs.gov/...'></div>"
+    + "<div class='field'><label>Verified on</label><input type='date' id='nrVer' value='"+todayISO()+"'></div>"
+    + "</div><div class='row'><button class='btn pri' id='nrSave'>Add</button><button class='btn ghost' id='nrCancel'>Cancel</button></div>");
+  $("#nrCancel").onclick = closeSheet;
+  $("#nrSave").onclick = () => {
+    const c = num($("#nrCents").value), f = $("#nrFrom").value, src = $("#nrSrc").value.trim();
+    if(c==null || !f || !src){ toast("Rate, date and source are all required."); return; }
+    DB.rates.push({id:uuid(), rateClass:$("#nrClass").value, effectiveFrom:f, cents:c,
+      source:src, sourceUrl:$("#nrUrl").value.trim(), verifiedOn:$("#nrVer").value});
+    sysLog("rate_add", $("#nrClass").value+" "+f+" @ "+c+"¢ — "+src);
+    save(); closeSheet(); renderSettings(); renderAll(); toast("Rate period added. Existing trips unchanged.");
+  };
+}
+
+/* ── recalculate (explicit, counted, confirmed, logged) ──────────── */
+function openRecalc(){
+  const years = Array.from(new Set(DB.trips.map(t=>yearOf(t.date)))).sort().reverse();
+  if(!years.length){ toast("No trips to recalculate."); return; }
+  openSheet("<h1>Recalculate trips</h1>"
+    + "<div class='warnbox'>This rewrites the rate stored on past records. Only do it when you mean to restate a period — for example after correcting a rate you entered wrong. Every change is written to that trip's change history.</div>"
+    + "<div class='card'><div class='field'><label>Year</label><select id='rcYear'>"
+    + years.map(y=>"<option>"+y+"</option>").join("") + "</select></div>"
+    + "<div class='field'><label>Project</label><select id='rcLed'><option value='all'>All projects</option>"
+    + DB.ledgers.map(l=>"<option value='"+l.id+"'>"+esc(l.name)+"</option>").join("") + "</select></div>"
+    + "<div id='rcPreview'></div></div>"
+    + "<div class='row'><button class='btn pri' id='rcGo' disabled>Recalculate</button><button class='btn ghost' id='rcCancel'>Cancel</button></div>");
+  const preview = () => {
+    const y = $("#rcYear").value, lid = $("#rcLed").value;
+    const scope = DB.trips.filter(t => yearOf(t.date)===y && (lid==="all"||t.ledgerId===lid));
+    const changes = scope.map(t => {
+      const rr = resolveRate(ledgerById(t.ledgerId), t.date);
+      const nc = rr ? rr.cents : null;
+      return {t, from:t.rateCentsApplied, to:nc, diff: nc!==t.rateCentsApplied};
+    }).filter(x=>x.diff);
+    const oldSum = r2(changes.reduce((s,x)=>s+((x.t.miles||0)*(x.from||0)/100),0));
+    const newSum = r2(changes.reduce((s,x)=>s+((x.t.miles||0)*(x.to||0)/100),0));
+    $("#rcPreview").innerHTML = changes.length
+      ? "<div class='warnbox ok'><b>"+changes.length+" of "+scope.length+" record(s) will change.</b>"
+        + "<div style='margin-top:6px'>Value of those records: "+money(oldSum)+" → <b>"+money(newSum)+"</b> ("+(newSum-oldSum>=0?"+":"")+money(newSum-oldSum)+")</div>"
+        + "<ul>"+changes.slice(0,8).map(x=>"<li>"+fmtDate(x.t.date)+" "+esc(x.t.destName||"—")+": "+(x.from==null?"none":x.from+"¢")+" → "+(x.to==null?"none":x.to+"¢")+"</li>").join("")
+        + (changes.length>8?"<li>…and "+(changes.length-8)+" more</li>":"")+"</ul></div>"
+      : "<div class='warnbox ok'><b>Nothing would change.</b> All "+scope.length+" record(s) already carry the rate in force on their trip date.</div>";
+    $("#rcGo").disabled = !changes.length;
+    $("#rcGo").dataset.n = changes.length;
+    return changes;
+  };
+  $("#rcYear").onchange = preview; $("#rcLed").onchange = preview; preview();
+  $("#rcCancel").onclick = closeSheet;
+  $("#rcGo").onclick = () => {
+    const changes = preview();
+    if(!changes.length) return;
+    if(!confirm("Recalculate "+changes.length+" record(s)?\n\nEach change will be stamped into that trip's change history. This cannot be auto-undone — restore a JSON backup if you change your mind.")) return;
+    changes.forEach(x => {
+      x.t.changeLog = (x.t.changeLog||[]).concat([{ts:nowISO(), field:"rateCentsApplied",
+        old:(x.from==null?"—":x.from+"¢"), new:(x.to==null?"—":x.to+"¢"), reason:"bulk recalculate"}]);
+      x.t.rateCentsApplied = x.to; x.t.updatedAt = nowISO();
+    });
+    sysLog("recalculate", changes.length+" record(s) restated for "+$("#rcYear").value);
+    save(); closeSheet(); renderAll(); renderSettings();
+    toast(changes.length+" record(s) recalculated and logged.", 5000);
+  };
+}
+
+/* ══════════════════ EXPORT ══════════════════ */
+function download(name, text, mime){
+  const blob = new Blob([text], {type:(mime||"text/plain")+";charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=name; a.rel="noopener";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+function markExported(kind){
+  DB.settings.lastExportAt = nowISO(); DB.settings.tripsSinceExport = 0;
+  sysLog("export", kind); save(); renderNag();
+}
+function csvCell(v){
+  const s = v===null||v===undefined ? "" : String(v);
+  return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+const CSV_COLS = ["id","date","project","rateClass","rateCentsApplied","miles","odoStart","odoEnd","milesManual",
+  "roundTrip","amountDollars","destName","destAddress","destLat","destLon","purpose","forWhom","category",
+  "parking","tolls","otherCost","totalCosts","combined","notes","createdAt","updatedAt","editCount","status"];
+function csvRow(t, status){
+  const led = ledgerById(t.ledgerId) || {name:"(deleted project)", rateClass:""};
+  const amt = tripAmount(t), costs = tripCosts(t);
+  return [t.id, t.date, led.name, led.rateClass, t.rateCentsApplied, t.miles, t.odoStart, t.odoEnd, t.milesManual,
+    t.roundTrip?"yes":"no", amt==null?"":amt.toFixed(2), t.destName, t.destAddress, t.destLat, t.destLon,
+    t.purpose, t.forWhom, led.rateClass==="medical"?"medical":"conservator/business",
+    t.parking, t.tolls, t.otherCost, costs?costs.toFixed(2):"", ((amt||0)+costs).toFixed(2),
+    t.notes, t.createdAt, t.updatedAt, (t.changeLog||[]).length, status].map(csvCell).join(",");
+}
+function exportCSV(year, lid){
+  const list = filterTrips(year, lid, "");
+  if(!list.length){ toast("Nothing in that filter."); return; }
+  const ledName = lid==="all" ? "all-projects" : (ledgerById(lid)||{name:"project"}).name.replace(/[^a-z0-9]+/gi,"-").toLowerCase();
+  const del = DB.deleted.filter(t => (year==="all"||yearOf(t.date)===year) && (lid==="all"||t.ledgerId===lid));
+  const lines = [CSV_COLS.join(",")]
+    .concat(list.slice().reverse().map(t=>csvRow(t,"active")))
+    .concat(del.map(t=>csvRow(t,"deleted")));
+  const s = summarize(list);
+  lines.push("");
+  lines.push(csvCell("TOTALS (active only)")+","+csvCell(year)+","+csvCell(ledName)+",,,"+csvCell(s.miles.toFixed(1))+",,,,,"+csvCell(s.dollars.toFixed(2)));
+  download("odosimple-"+(year==="all"?"all":year)+"-"+ledName+".csv", lines.join("\n"), "text/csv");
+  markExported("CSV "+year+"/"+ledName);
+  toast("CSV exported.");
+}
+function exportJSON(){
+  const payload = {
+    _format:"odosimple-backup", _formatVersion:1, _exportedAt:nowISO(),
+    _note:"Complete backup: active trips, deleted trips, change logs, projects, rate table, fill-ups, settings.",
+    data: DB
+  };
+  download("odosimple-backup-"+todayISO()+".json", JSON.stringify(payload,null,2), "application/json");
+  markExported("full JSON backup");
+  toast("Backup saved. Keep it with your court file.", 5000);
+}
+function importJSON(file){
+  const rd = new FileReader();
+  rd.onload = () => {
+    let p;
+    try{ p = JSON.parse(rd.result); }catch(e){ toast("That file isn't valid JSON."); return; }
+    const incoming = p && p.data && Array.isArray(p.data.trips) ? p.data : (Array.isArray(p.trips) ? p : null);
+    if(!incoming){ toast("That doesn't look like an ODO simple backup."); return; }
+    const curN = DB.trips.length + DB.deleted.length;
+    const inN  = incoming.trips.length + (incoming.deleted||[]).length;
+    openSheet("<h1>Restore backup</h1>"
+      + "<div class='card'>"
+      + kv("File exported", esc((p._exportedAt||"unknown").slice(0,19).replace("T"," ")))
+      + kv("Trips in file", incoming.trips.length + " active + " + ((incoming.deleted||[]).length) + " deleted")
+      + kv("Projects in file", (incoming.ledgers||[]).length)
+      + kv("Currently on this device", DB.trips.length + " active + " + DB.deleted.length + " deleted")
+      + "</div>"
+      + (curN ? "<div class='warnbox'>This device already holds <b>"+curN+"</b> record(s). Choose carefully.</div>" : "")
+      + "<button class='btn wide' id='imMerge'>Merge — add records this device doesn't have</button>"
+      + "<div class='tiny' style='margin:6px 0 12px'>Safe. Matches on record id; nothing existing is overwritten or removed.</div>"
+      + "<button class='btn danger wide' id='imReplace'>Replace — wipe this device and restore the file</button>"
+      + "<div class='tiny' style='margin:6px 0 12px'>Destroys the "+curN+" record(s) currently here.</div>"
+      + "<button class='btn ghost wide' id='imCancel'>Cancel</button>");
+    $("#imCancel").onclick = closeSheet;
+    $("#imMerge").onclick = () => {
+      const have = new Set(DB.trips.map(t=>t.id).concat(DB.deleted.map(t=>t.id)));
+      let a=0,d=0,l=0,r=0,f=0;
+      (incoming.ledgers||[]).forEach(x => { if(!DB.ledgers.some(y=>y.id===x.id)){ DB.ledgers.push(x); l++; } });
+      (incoming.rates||[]).forEach(x => { if(!DB.rates.some(y=>y.id===x.id)){ DB.rates.push(x); r++; } });
+      (incoming.fillups||[]).forEach(x => { if(!DB.fillups.some(y=>y.id===x.id)){ DB.fillups.push(x); f++; } });
+      incoming.trips.forEach(t => { if(!have.has(t.id)){ DB.trips.push(t); a++; } });
+      (incoming.deleted||[]).forEach(t => { if(!have.has(t.id)){ DB.deleted.push(t); d++; } });
+      sysLog("import_merge", a+" trips, "+d+" deleted, "+l+" projects, "+r+" rates, "+f+" fill-ups");
+      save(); closeSheet(); renderAll(); renderSettings();
+      toast("Merged: "+a+" trip(s), "+d+" deleted, "+l+" project(s), "+r+" rate(s).", 6000);
+    };
+    $("#imReplace").onclick = () => {
+      if(!confirm("Replace everything on this device with the backup file?\n\nThe "+curN+" record(s) here will be destroyed.")) return;
+      DB = incoming;
+      DB.settings = Object.assign(freshDB().settings, DB.settings||{});
+      ["ledgers","rates","trips","deleted","fillups","systemLog"].forEach(k => { if(!Array.isArray(DB[k])) DB[k]=[]; });
+      sysLog("import_replace", incoming.trips.length+" trips restored");
+      selectedLedgerId = DB.settings.lastLedgerId || (DB.ledgers[0]||{}).id || null;
+      save(); closeSheet(); renderAll(); renderSettings(); toast("Restored from backup.", 5000);
+    };
+  };
+  rd.readAsText(file);
+}
+
+/* ══════════════════ PRINTABLE COURT / TAX REPORT ══════════════════
+   Deliberately excludes all fuel-comparison data. Actual miles and the
+   official rate only — one report per project. */
+function reportCSS(){
+  return "<style>"
+  + "@page{margin:.6in}"
+  + "#rp{color:#000;background:#fff;font:11pt/1.35 Georgia,'Times New Roman',serif;max-width:7.3in;margin:0 auto}"
+  + "#rp h1{font-size:15pt;margin:0 0 2pt;letter-spacing:.3pt}"
+  + "#rp .hd{font-size:9.5pt;color:#333;margin:0 0 10pt}"
+  + "#rp table{width:100%;border-collapse:collapse;font-size:9.5pt}"
+  + "#rp th{text-align:left;border-bottom:1.2pt solid #000;padding:4pt 3pt;font-size:8.5pt;letter-spacing:.4pt;text-transform:uppercase}"
+  + "#rp td{border-bottom:.5pt solid #bbb;padding:4pt 3pt;vertical-align:top}"
+  + "#rp td.n,#rp th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}"
+  + "#rp tr.sub td{border-top:.8pt solid #666;border-bottom:0;font-weight:bold;background:#f2f2f2}"
+  + "#rp tr.gt td{border-top:1.4pt solid #000;border-bottom:1.4pt solid #000;font-weight:bold;font-size:10.5pt}"
+  + "#rp .sig{margin-top:26pt;font-size:10pt}"
+  + "#rp .sig .ln{border-bottom:.8pt solid #000;height:22pt;margin-top:16pt}"
+  + "#rp .att{font-size:8.5pt;color:#333;margin-top:14pt;border-top:.5pt solid #999;padding-top:6pt}"
+  + "#rp .pg{page-break-after:always}"
+  + "</style>";
+}
+function reportForLedger(l, list, year){
+  const s = summarize(list);
+  const rates = Array.from(new Set(list.map(t=>t.rateCentsApplied).filter(v=>v!=null))).sort((a,b)=>a-b);
+  let h = "<div class='pg'>";
+  h += "<h1>Mileage Record — "+esc(l.name)+"</h1>";
+  h += "<div class='hd'><b>Period:</b> "+(year==="all"?"all dates":"calendar year "+year)
+    + " &nbsp;·&nbsp; <b>Rate basis:</b> "+esc((RATE_CLASSES[l.rateClass]||{}).label||l.rateClass)
+    + (rates.length ? " ("+rates.map(r=>r.toFixed(1)+"¢").join(" / ")+" per mile)" : "")
+    + "<br><b>Prepared:</b> "+fmtDate(todayISO())+" &nbsp;·&nbsp; <b>Records:</b> "+s.n+"</div>";
+  h += "<table><thead><tr><th>Date</th><th>Destination</th><th>Purpose</th><th>For</th>"
+    + "<th class='n'>Miles</th><th class='n'>Rate</th><th class='n'>Amount</th><th class='n'>Costs</th></tr></thead><tbody>";
+  const byMonth = {};
+  list.slice().sort((a,b)=>a.date<b.date?-1:1).forEach(t => { (byMonth[t.date.slice(0,7)] = byMonth[t.date.slice(0,7)]||[]).push(t); });
+  Object.keys(byMonth).sort().forEach(mk => {
+    byMonth[mk].forEach(t => {
+      const amt = tripAmount(t), c = tripCosts(t);
+      h += "<tr><td>"+t.date+"</td><td>"+esc(t.destName||"—")+(t.destAddress?"<br><span style='color:#555;font-size:8.5pt'>"+esc(t.destAddress)+"</span>":"")+"</td>"
+        + "<td>"+esc(t.purpose||"—")+"</td><td>"+esc(t.forWhom||"—")+"</td>"
+        + "<td class='n'>"+(t.miles==null?"—":t.miles.toFixed(1))+"</td>"
+        + "<td class='n'>"+(t.rateCentsApplied==null?"—":t.rateCentsApplied.toFixed(1)+"¢")+"</td>"
+        + "<td class='n'>"+(amt==null?"—":amt.toFixed(2))+"</td>"
+        + "<td class='n'>"+(c?c.toFixed(2):"—")+"</td></tr>";
+    });
+    const ms = summarize(byMonth[mk]);
+    h += "<tr class='sub'><td colspan='4'>"+MON[+mk.slice(5,7)-1]+" "+mk.slice(0,4)+" subtotal ("+ms.n+")</td>"
+      + "<td class='n'>"+ms.miles.toFixed(1)+"</td><td></td><td class='n'>"+ms.dollars.toFixed(2)+"</td><td class='n'>"+(ms.costs?ms.costs.toFixed(2):"—")+"</td></tr>";
+  });
+  h += "<tr class='gt'><td colspan='4'>GRAND TOTAL — "+esc(l.name)+"</td>"
+    + "<td class='n'>"+s.miles.toFixed(1)+"</td><td></td><td class='n'>"+s.dollars.toFixed(2)+"</td><td class='n'>"+(s.costs?s.costs.toFixed(2):"—")+"</td></tr>";
+  if(s.costs>0) h += "<tr class='gt'><td colspan='6'>MILEAGE + OUT-OF-POCKET COSTS</td><td class='n' colspan='2'>"+s.combined.toFixed(2)+"</td></tr>";
+  h += "</tbody></table>";
+  h += "<div class='att'>Each entry was recorded contemporaneously in a mileage log kept on a personal device. "
+    + "The rate shown on each line is the rate that was in effect on the date of that trip and was recorded at the time the entry was saved. "
+    + "Rate authority: "+esc(Array.from(new Set(list.map(t=>{const r=rateForDate(l.rateClass,t.date);return r?r.source:"";}).filter(Boolean))).join("; ")||"see rate table")+".</div>";
+  h += "<div class='sig'>I certify that the mileage recorded above was actually driven for the purpose stated on each line, "
+    + "and that no mile listed here has been claimed on any other schedule or under any other category."
+    + "<div style='display:flex;gap:26pt;margin-top:4pt'>"
+    + "<div style='flex:2'><div class='ln'></div>Signature</div>"
+    + "<div style='flex:1'><div class='ln'></div>Date</div></div>"
+    + "<div style='margin-top:12pt'><div class='ln' style='max-width:3.2in'></div>Printed name and capacity</div></div>";
+  h += "</div>";
+  return h;
+}
+function buildReport(year, lid){
+  const leds = lid==="all" ? DB.ledgers.filter(l => DB.trips.some(t=>t.ledgerId===l.id)) : [ledgerById(lid)].filter(Boolean);
+  const parts = [];
+  leds.forEach(l => {
+    const list = filterTrips(year, l.id, "");
+    if(list.length) parts.push(reportForLedger(l, list, year));
+  });
+  if(!parts.length){ toast("Nothing to report in that filter."); return; }
+  $("#reportBody").innerHTML = reportCSS()
+    + "<div class='noprint' style='margin:0 0 12px'><button class='btn pri' id='rpPrint'>Print / Save as PDF</button> "
+    + "<button class='btn ghost' id='rpBack'>Back</button>"
+    + "<div class='tiny' style='margin-top:8px'>Separate page per project. No fuel-comparison data appears here — actual miles and the official rate only.</div></div>"
+    + "<div id='rp'>"+parts.join("")+"</div>";
+  goto("report");
+  $("#rpPrint").onclick = () => { markExported("printable report "+year); window.print(); };
+  $("#rpBack").onclick = () => goto("set");
+  window.scrollTo({top:0});
+}
+function printMap(year, lid){
+  const svg = $("#mapBox").innerHTML;
+  const led = lid==="all" ? "All projects" : (ledgerById(lid)||{name:""}).name;
+  $("#reportBody").innerHTML = reportCSS()
+    + "<div class='noprint' style='margin:0 0 12px'><button class='btn pri' id='rpPrint'>Print / Save as PDF</button> <button class='btn ghost' id='rpBack'>Back</button></div>"
+    + "<div id='rp'><h1>Trip Map</h1><div class='hd'><b>Period:</b> "+(year==="all"?"all dates":year)
+    + " &nbsp;·&nbsp; <b>Project:</b> "+esc(led)+" &nbsp;·&nbsp; <b>Prepared:</b> "+fmtDate(todayISO())+"</div>"
+    + "<div style='border:.8pt solid #000'>"+svg+"</div>"
+    + "<div class='att'>Plotted from GPS coordinates captured on the device at the destination. "
+    + "Grid lines are true latitude and longitude; the bar is a distance scale in statute miles. No third-party map service was used.</div></div>";
+  goto("report");
+  $("#rpPrint").onclick = () => window.print();
+  $("#rpBack").onclick = () => goto("map");
+  window.scrollTo({top:0});
+}
+
+/* ══════════════════ GPS ══════════════════ */
+function grabGPS(cb){
+  if(!navigator.geolocation){ toast("This device has no location API."); return; }
+  toast("Getting location…", 12000);
+  navigator.geolocation.getCurrentPosition(
+    p => { const c=$(".toast"); if(c) c.remove(); cb(p.coords.latitude, p.coords.longitude, p.coords.accuracy); },
+    e => { const c=$(".toast"); if(c) c.remove();
+      toast(e.code===1 ? "Location permission denied — allow it in Settings → Safari, or type the coordinates in." : "Couldn't get a fix. GPS needs a moment outdoors.", 6000); },
+    {enableHighAccuracy:true, timeout:11000, maximumAge:0}
+  );
+}
+
+/* ══════════════════ BACKUP NAG ══════════════════ */
+function renderNag(){
+  const n = $("#nag");
+  const last = DB.settings.lastExportAt;
+  const days = last ? daysSince(last) : null;
+  const since = DB.settings.tripsSinceExport||0;
+  const total = DB.trips.length;
+  let msg = null;
+  if(total && !last) msg = "You have <b>"+total+"</b> trip(s) and have never exported a backup.";
+  else if(days!=null && days > 30) msg = "Last backup was <b>"+days+" days</b> ago.";
+  else if(since > 15) msg = "<b>"+since+"</b> trips added since your last backup.";
+  if(!msg){ n.classList.add("hidden"); n.innerHTML=""; return; }
+  n.classList.remove("hidden");
+  n.innerHTML = "<div class='warnbox' style='margin:10px 0 0'>⚠ "+msg
+    + " iOS can evict a site's stored data if you don't open it for a while — an un-exported record is a record at risk. "
+    + "<button class='btn sm' id='nagGo' style='margin-top:8px'>Back up now</button></div>";
+  $("#nagGo").onclick = () => exportJSON();
+}
+
+/* ══════════════════ NAV + BOOT ══════════════════ */
+function goto(s){
+  $$(".screen").forEach(el => el.classList.toggle("on", el.id==="scr-"+s));
+  $$("nav button").forEach(b => b.classList.toggle("on", b.dataset.s===s));
+  if(s==="trips")  renderTripList();
+  if(s==="totals") renderTotals();
+  if(s==="map")    renderMap();
+  if(s==="set")    renderSettings();
+}
+function fillSelect(sel, includeAll){
+  if(!sel) return;
+  const years = Array.from(new Set(DB.trips.concat(DB.deleted).map(t=>yearOf(t.date)))).filter(Boolean).sort().reverse();
+  const cy = String(new Date().getFullYear());
+  if(!years.includes(cy)) years.unshift(cy);
+  const prev = sel.value;
+  sel.innerHTML = (includeAll?"<option value='all'>All years</option>":"") + years.map(y=>"<option value='"+y+"'>"+y+"</option>").join("");
+  sel.value = (prev && Array.from(sel.options).some(o=>o.value===prev)) ? prev : cy;
+}
+function fillLedgerSelect(sel, includeAll){
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = (includeAll?"<option value='all'>All projects</option>":"")
+    + DB.ledgers.map(l=>"<option value='"+l.id+"'>"+esc(l.name)+"</option>").join("");
+  sel.value = (prev && Array.from(sel.options).some(o=>o.value===prev)) ? prev : "all";
+}
+function renderAll(){
+  ["#qYear","#tYear","#mYear"].forEach(s => fillSelect($(s), true));
+  ["#qLedger","#tLedger","#mLedger"].forEach(s => fillLedgerSelect($(s), true));
+  renderLedgerSeg(); renderChips(); renderNag();
+  const on = $$(".screen.on")[0];
+  if(on){
+    if(on.id==="scr-trips")  renderTripList();
+    if(on.id==="scr-totals") renderTotals();
+    if(on.id==="scr-map")    renderMap();
+  }
+  $("#hdrSub").textContent = DB.trips.length + " trip" + (DB.trips.length===1?"":"s") + " · offline";
+}
+
+function boot(){
+  load();
+  selectedLedgerId = DB.settings.lastLedgerId || (DB.ledgers[0]||{}).id || null;
+  if(!ledgerById(selectedLedgerId)) selectedLedgerId = (DB.ledgers[0]||{}).id || null;
+
+  $$("nav button").forEach(b => b.onclick = () => goto(b.dataset.s));
+  $("#btnPrintTop").onclick = () => { goto("set"); setTimeout(()=>{ const e=$("#xReport"); if(e) e.scrollIntoView({behavior:"smooth",block:"center"}); },60); };
+  $("#toggleMode").onclick = () => setMode(addMode==="odo"?"manual":"odo");
+  $("#btnSave").onclick = saveTrip;
+  $("#mgLedgers").onclick = e => { e.preventDefault(); goto("set"); };
+  $("#btnGps").onclick = () => grabGPS((lat,lon,acc) => {
+    $("#fLat").value = lat.toFixed(6); $("#fLon").value = lon.toFixed(6);
+    $("#gpsHint").innerHTML = "Captured ±"+Math.round(acc)+" m at "+new Date().toLocaleTimeString();
+    updateLive();
+  });
+  ["#fOdoStart","#fOdoEnd","#fMiles","#fParking","#fTolls","#fOther","#fDestName"].forEach(s => {
+    const e=$(s); if(e){ e.addEventListener("input", updateLive); }
+  });
+  $("#fDate").addEventListener("change", () => { renderLedgerSeg(); updateLive(); });
+  $("#fRound").addEventListener("change", updateLive);
+  $("#fForWhom").addEventListener("input", e => e.target.dataset.auto="0");
+  ["#qYear","#qLedger"].forEach(s => $(s).addEventListener("change", renderTripList));
+  $("#qSearch").addEventListener("input", renderTripList);
+  ["#tYear","#tLedger"].forEach(s => $(s).addEventListener("change", renderTotals));
+  ["#mYear","#mLedger"].forEach(s => $(s).addEventListener("change", renderMap));
+
+  renderAll(); resetAddForm(); goto("add");
+
+  if("serviceWorker" in navigator && location.protocol!=="file:"){
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  }
+}
+document.addEventListener("DOMContentLoaded", boot);
+window.__ODO = {get DB(){return DB;}, save, load, computeMiles, resolveRate, summarize, filterTrips, KEY, freshDB, haversineMi};
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "ODO simple — Mileage Log",
+  "short_name": "ODO simple",
+  "description": "Offline mileage log with per-project ledgers, IRS rate snapshots, an audit trail, and a printable court/tax report. All data stays on the device.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
