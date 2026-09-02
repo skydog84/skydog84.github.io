@@ -168,6 +168,16 @@ table.rt td input{padding:7px 8px;font-size:14px;border-radius:8px}
 .tiny{font-size:11px;color:var(--dim2)}
 .hidden{display:none!important}
 .mapwrap{background:#0e1526;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rmap{position:relative;overflow:hidden;background:#0e1526;border-radius:12px}
+.rmap .rm-tiles{position:absolute;inset:0;filter:grayscale(.32) brightness(.70) contrast(1.10) saturate(.85)}
+.rmap .rm-tiles img{position:absolute;user-select:none;pointer-events:none;max-width:none}
+.rmap .rm-shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(11,16,32,.30),rgba(11,16,32,0) 38%,rgba(11,16,32,.42))}
+.rmap svg.rm-ovl{position:absolute;inset:0;width:100%;height:100%}
+.rm-attr{position:absolute;right:5px;bottom:4px;font-size:9px;color:#9fb0d8;background:rgba(11,16,32,.62);padding:1px 5px;border-radius:5px;letter-spacing:.2px}
+.rm-flag{position:absolute;left:6px;top:6px;font-size:9.5px;color:#9fb0d8;background:rgba(11,16,32,.66);padding:2px 6px;border-radius:5px}
+.rm-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px}
+@keyframes rmpulse{0%{r:7;opacity:.75}70%{r:20;opacity:0}100%{r:20;opacity:0}}
+.rm-pulse{animation:rmpulse 1.8s ease-out infinite}
 .mapwrap svg{display:block;width:100%;height:auto}
 .nowrap{white-space:nowrap}
 .spread{display:flex;justify-content:space-between;align-items:center;gap:10px}
@@ -267,6 +277,8 @@ table.rt td input{padding:7px 8px;font-size:14px;border-radius:8px}
       <div class="tiny" id="trkNote" style="margin-top:9px;text-align:center"></div>
     </div>
   </div>
+
+  <div id="pendBanner" style="display:none"></div>
 
   <div class="counter" id="liveCounter">
     <div class="cap">Value of this trip</div>
@@ -404,6 +416,10 @@ table.rt td input{padding:7px 8px;font-size:14px;border-radius:8px}
   </div>
   <div class="card">
     <h2>Where we drove</h2>
+    <div class="row" style="margin-bottom:9px">
+      <button class="btn sm" id="mmRoad" type="button">Road map</button>
+      <button class="btn sm" id="mmCourt" type="button">Court exhibit</button>
+    </div>
     <div class="mapwrap" id="mapBox"></div>
     <div id="mapLegend"></div>
   </div>
@@ -537,12 +553,27 @@ function load(){
   }
 }
 let saveErr = false;
+/* Returns true only if the record actually reached the device. Callers that
+   tell the user something was saved MUST check it — the old version swallowed
+   a full-storage failure and the app then reported "Saved · 14.3 mi" for a
+   trip that existed nowhere but RAM. */
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify(DB)); saveErr=false; }
+  try{ localStorage.setItem(KEY, JSON.stringify(DB)); saveErr=false; return true; }
   catch(e){
-    if(!saveErr){ saveErr=true; toast("Could not save — device storage may be full. Export a backup now.", 8000); }
+    saveErr = true;
+    toast("NOT SAVED — device storage is full. Export a JSON backup, then clear space.", 10000);
     console.error(e);
+    return false;
   }
+}
+
+/* Rough share of the storage budget in use, so the app can warn before it is
+   the middle of a drive. */
+function storageLoad(){
+  try{
+    let n=0; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); n += k.length + (localStorage.getItem(k)||"").length; }
+    return n / 5000000;
+  }catch(e){ return 0; }
 }
 function sysLog(kind, detail){
   DB.systemLog.push({ts:nowISO(), kind, detail});
@@ -606,9 +637,9 @@ function haversineMi(a,b,c,d){
 
 const TRACK_KEY = "odosimple.track.v1";
 const TRK = {
-  active:false, paused:false, startedAt:null, points:[], miles:0, gaps:[],
+  active:false, paused:false, startedAt:null, points:[], disp:[], miles:0, gaps:[],
   watchId:null, wakeLock:null, timer:null, hiddenAt:null,
-  lastAcc:null, lastSpeed:null, rejected:0
+  lastAcc:null, lastSpeed:null, rejected:0, lastSaved:0, dispStep:35
 };
 
 /* GPS points are noisy. Summing them raw overstates distance badly, so a
@@ -617,13 +648,24 @@ const TRK_MIN_ACC_M   = 50;    // ignore fixes worse than this
 const TRK_MIN_MOVE_M  = 12;    // ignore jitter while parked
 const TRK_MAX_MPH     = 120;   // ignore teleports
 
+/* Crash insurance, not the record. Storing every raw fix put a 2 MB key in
+   localStorage on a long day and pushed the whole database over the limit —
+   so store the same coarse route the saved trip would keep. Miles are carried
+   as a number and never re-derived from these points. */
+let trkSaveWarned = false;
 function trkSave(){
   try{
     localStorage.setItem(TRACK_KEY, JSON.stringify({
       active:TRK.active, paused:TRK.paused, startedAt:TRK.startedAt,
-      points:TRK.points, miles:TRK.miles, gaps:TRK.gaps
+      points:trkDownsample(TRK.points), miles:TRK.miles, gaps:TRK.gaps
     }));
-  }catch(e){ /* storage full — the in-memory track still works */ }
+    trkSaveWarned = false;
+  }catch(e){
+    if(!trkSaveWarned){
+      trkSaveWarned = true;
+      toast("Storage is full — this drive is only in memory. Don't close the app; save it as soon as you stop.", 12000);
+    }
+  }
 }
 function trkClearSaved(){ try{ localStorage.removeItem(TRACK_KEY); }catch(e){} }
 
@@ -638,7 +680,7 @@ function trkRestore(){
     + d.miles.toFixed(1) + " mi recorded, last fix " + mins + " min ago.\n\n"
     + "OK to pick it back up, or Cancel to keep the miles and stop here.");
   Object.assign(TRK, {active:true, paused:false, startedAt:d.startedAt,
-                      points:d.points, miles:d.miles, gaps:d.gaps||[]});
+                      points:d.points, disp:trkDownsample(d.points), miles:d.miles, gaps:d.gaps||[]});
   TRK.gaps.push({from:d.points[d.points.length-1].t, to:Date.now(), reason:"app closed"});
   if(go){ trkBegin(true); } else { stopTracking(); }
 }
@@ -658,8 +700,17 @@ function trkReleaseWakeLock(){
 
 function startTracking(){
   if(!navigator.geolocation){ toast("This device has no location API."); return; }
-  Object.assign(TRK, {active:true, paused:false, startedAt:Date.now(), points:[],
-                      miles:0, gaps:[], rejected:0, lastAcc:null, lastSpeed:null});
+  if(pendingTrack){
+    if(!confirm("A recorded drive of "+pendingTrack.trackedMiles.toFixed(1)+" mi is still unsaved.\n\n"
+      + "Starting a new drive discards it. Save it first, or press OK to throw it away.")) { goto("add"); return; }
+    clearPending();
+  }
+  if(editingId){
+    if(!confirm("You have a saved trip open for editing. Starting a drive closes that edit without saving it.\n\nContinue?")) return;
+    resetAddForm();
+  }
+  Object.assign(TRK, {active:true, paused:false, startedAt:Date.now(), points:[], disp:[],
+                      miles:0, gaps:[], rejected:0, lastAcc:null, lastSpeed:null, lastSaved:0, dispStep:35});
   trkBegin(false);
   toast("Tracking. Keep the app open — iOS stops a web app when the screen locks.", 6000);
 }
@@ -671,13 +722,13 @@ function trkBegin(resuming){
   });
   clearInterval(TRK.timer);
   TRK.timer = setInterval(()=>{
-    renderTracker();
+    renderTracker(true);
     const hs = $("#hdrSub");
     if(hs){
       hs.textContent = (TRK.paused ? "⏸ drive paused · " : "● recording · ") + TRK.miles.toFixed(1) + " mi";
       hs.style.color = TRK.paused ? "var(--warn)" : "var(--acc2)";
     }
-    trkSave();
+    if(Date.now() - (TRK.lastSaved||0) > 5000){ TRK.lastSaved = Date.now(); trkSave(); }
   }, 1000);
   renderTracker(); renderAll();
 }
@@ -698,10 +749,26 @@ function trkOnFix(pos){
     const mph = mi / (secs/3600);
     if(meters < TRK_MIN_MOVE_M) return;      // parked, or GPS shimmer
     if(mph > TRK_MAX_MPH){ TRK.rejected++; return; }
-    TRK.miles = r1(TRK.miles + mi);
+    /* Accumulate at FULL precision. Rounding here (r1) silently discarded
+       every segment under 0.05 mi — at highway speed with a fix a second
+       that is every single segment, so 31 minutes of driving logged 0.3 mi.
+       Round for display and at save time only.                           */
+    TRK.miles += mi;
   }
   TRK.points.push(pt);
-  renderTracker(); trkSave();
+  /* A separate, coarser list for drawing. Re-serialising 5,000 raw points
+     into an SVG path twice a second stalls the phone that is supposed to be
+     counting the miles. */
+  const dl = TRK.disp[TRK.disp.length-1];
+  if(!dl || haversineMi(dl.lat,dl.lon,pt.lat,pt.lon)*1609.344 >= TRK.dispStep) TRK.disp.push(pt);
+  /* Halve the drawn route whenever it gets long, so redraw cost stays flat
+     over a three-hour drive instead of climbing with every mile. */
+  if(TRK.disp.length > 500){
+    TRK.disp = TRK.disp.filter((p,i) => i%2===0 || i===TRK.disp.length-1);
+    TRK.dispStep *= 2;
+  }
+  renderTracker(false);
+  if(Date.now() - (TRK.lastSaved||0) > 5000){ TRK.lastSaved = Date.now(); trkSave(); }
 }
 
 function trkOnErr(e){
@@ -726,13 +793,21 @@ function stopTracking(discard){
   const pts = TRK.points.slice();
   const gaps = TRK.gaps.filter(g => g.to && (g.to - g.from) > 20000);
   const started = TRK.startedAt, ended = Date.now();
-  Object.assign(TRK, {active:false, paused:false, points:[], miles:0, gaps:[],
-                      startedAt:null, lastAcc:null, lastSpeed:null, rejected:0});
+  Object.assign(TRK, {active:false, paused:false, points:[], disp:[], miles:0, gaps:[],
+                      startedAt:null, lastAcc:null, lastSpeed:null, rejected:0, lastSaved:0, dispStep:35});
   trkClearSaved(); renderTracker(); renderAll();
   if(discard || miles <= 0 || pts.length < 2) return;
 
   /* Hand the result to the Add form. The user still says where they went
      and what for — the tracker only supplies the distance and the route. */
+  /* This drive is a NEW trip. If an edit was open, leave it — otherwise the
+     recorded miles, the endpoint and the round-trip flag all overwrite a
+     saved record and land in its change log as if the user typed them. */
+  if(editingId){
+    editingId = null;
+    toast("Left the edit you had open — a recorded drive is always a new trip.", 7000);
+  }
+  resetAddForm();
   setMode("manual");
   $("#fMiles").value = miles.toFixed(1);
   $("#fRound").checked = false;
@@ -740,6 +815,7 @@ function stopTracking(discard){
   $("#fLat").value = last.lat.toFixed(6);
   $("#fLon").value = last.lon.toFixed(6);
   pendingTrack = {points: trkDownsample(pts), gaps, startedAt:started, endedAt:ended, trackedMiles:miles};
+  pendSave(); renderPending();
   updateLive();
   const mins = Math.round((ended - started)/60000);
   let msg = "Drive recorded: " + miles.toFixed(1) + " mi in " + mins + " min.";
@@ -764,13 +840,72 @@ function trkDownsample(pts){
 
 let pendingTrack = null;   // attached to the next saved trip
 
+/* A finished drive that has not been saved yet is the most valuable thing in
+   the app — it cannot be re-driven. Park it in storage the moment recording
+   stops, restore it on launch, and say so on screen until it is saved. */
+const PEND_KEY = "odosimple.pending.v1";
+let pendPersisted = true;
+function pendSave(){
+  try{
+    if(pendingTrack) localStorage.setItem(PEND_KEY, JSON.stringify(pendingTrack));
+    else localStorage.removeItem(PEND_KEY);
+    pendPersisted = true;
+  }catch(e){
+    pendPersisted = false;
+    toast("Storage is full — this recorded drive is only held in memory. Save it now.", 9000);
+  }
+}
+function clearPending(){
+  pendingTrack = null;
+  try{ localStorage.removeItem(PEND_KEY); }catch(e){}
+  renderPending();
+}
+function pendRestore(){
+  if(TRK.active) return;                 // a live drive owns the form
+  let raw=null; try{ raw = localStorage.getItem(PEND_KEY); }catch(e){}
+  if(!raw) return;
+  let d; try{ d = JSON.parse(raw); }catch(e){ return; }
+  if(!d || d.trackedMiles==null) { try{ localStorage.removeItem(PEND_KEY); }catch(e){} return; }
+  pendingTrack = d;
+  pendToForm();
+  updateLive(); renderPending();
+  toast("A recorded drive was still waiting to be saved: "+d.trackedMiles.toFixed(1)+" mi.", 8000);
+}
+function pendToForm(){
+  if(!pendingTrack) return;
+  setMode("manual");
+  $("#fMiles").value = pendingTrack.trackedMiles.toFixed(1);
+  $("#fRound").checked = false;
+  const last = pendingTrack.points && pendingTrack.points.length
+    ? pendingTrack.points[pendingTrack.points.length-1] : null;
+  if(last){ $("#fLat").value = last.lat.toFixed(6); $("#fLon").value = last.lon.toFixed(6); }
+}
+function renderPending(){
+  const el = $("#pendBanner"); if(!el) return;
+  if(!pendingTrack){ el.innerHTML = ""; el.style.display="none"; return; }
+  el.style.display = "";
+  const mins = Math.round((pendingTrack.endedAt - pendingTrack.startedAt)/60000);
+  el.innerHTML = "<div class='warnbox'>Recorded drive not saved yet — <b>"
+    + pendingTrack.trackedMiles.toFixed(1)+" mi</b> in "+mins+" min, "
+    + (pendingTrack.points||[]).length+" route points. Fill in where you went and hit <b>Save trip</b>. "
+    + (pendPersisted ? "It will still be here if you close the app."
+                     : "<b>Storage is full — this is only in memory. Do not close the app.</b>")
+    + " <button class='btn sm danger' id='pendDrop' style='margin-top:7px'>Discard recorded drive</button></div>";
+  const b = $("#pendDrop");
+  if(b) b.onclick = () => {
+    if(!confirm("Discard the recorded drive? "+pendingTrack.trackedMiles.toFixed(1)+" mi of GPS record is lost and cannot be re-driven.")) return;
+    clearPending(); $("#fMiles").value=""; $("#fLat").value=""; $("#fLon").value=""; updateLive();
+    toast("Recorded drive discarded.");
+  };
+}
+
 function fmtDur(ms){
   const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
   return h ? h+":"+String(m).padStart(2,"0")+":"+String(s%60).padStart(2,"0")
            : m+":"+String(s%60).padStart(2,"0");
 }
 
-function renderTracker(){
+function renderTracker(withMap){
   const card = $("#trkCard"); if(!card) return;
   card.classList.toggle("on", TRK.active && !TRK.paused);
   card.classList.toggle("paused", TRK.active && TRK.paused);
@@ -790,7 +925,10 @@ function renderTracker(){
     const a = TRK.lastAcc;
     $("#trkAcc").innerHTML = a == null ? ""
       : "<span class='acc-pill " + (a<=15?"acc-good":a<=40?"acc-ok":"acc-bad") + "'>±"+Math.round(a)+" m</span>";
-    $("#trkMap").innerHTML = trkMiniMap(TRK.points);
+    if(withMap !== false)
+      drawRoadMap($("#trkMap"), {h:230, follow:true, maxZoom:16,
+        routes:[{pts:TRK.disp, color:"#3ad1a5"}],
+        empty:"waiting for a GPS fix…"});
     const hs = $("#hdrSub");
     if(hs){
       hs.textContent = (TRK.paused ? "⏸ drive paused · " : "● recording · ") + TRK.miles.toFixed(1) + " mi";
@@ -814,7 +952,11 @@ function trkMiniMap(pts){
   if(pts.length < 2) return "<div style='padding:22px;text-align:center' class='tiny'>waiting for a second fix…</div>";
   const W=680, H=220, M=14;
   const las = pts.map(p=>p.lat), los = pts.map(p=>p.lon);
-  let minLa=Math.min(...las), maxLa=Math.max(...las), minLo=Math.min(...los), maxLo=Math.max(...los);
+  let minLa=Infinity, maxLa=-Infinity, minLo=Infinity, maxLo=-Infinity;
+  for(let i=0;i<las.length;i++){
+    if(las[i]<minLa) minLa=las[i]; if(las[i]>maxLa) maxLa=las[i];
+    if(los[i]<minLo) minLo=los[i]; if(los[i]>maxLo) maxLo=los[i];
+  }
   const kx = Math.cos(((minLa+maxLa)/2)*Math.PI/180);
   let spanLa = Math.max(maxLa-minLa, 0.0015), spanLo = Math.max(maxLo-minLo, 0.0015/Math.max(kx,.1));
   const cLa=(minLa+maxLa)/2, cLo=(minLo+maxLo)/2;
@@ -829,6 +971,186 @@ function trkMiniMap(pts){
     + "<circle cx='"+X(a.lon).toFixed(1)+"' cy='"+Y(a.lat).toFixed(1)+"' r='6' fill='#5b8cff' stroke='#0e1526' stroke-width='2'/>"
     + "<circle cx='"+X(b.lon).toFixed(1)+"' cy='"+Y(b.lat).toFixed(1)+"' r='7' fill='#3ad1a5' stroke='#0e1526' stroke-width='2'/>"
     + "</svg>";
+}
+
+
+/* ══════════════════ ROAD MAP ══════════════════
+   A slippy map with no library and no API key: OpenStreetMap raster tiles
+   positioned by hand, with the GPS route drawn over them in SVG.
+
+   Deliberate split, because this app ends up in front of a probate court:
+     • On screen  — real roads, so you can see where you actually drove.
+     • On the PDF — the offline lat/lon exhibit, unchanged. No tile service
+       touches a document that gets filed.
+   Tiles are the one network call in the app. Requesting a tile tells the
+   tile server roughly where you are, so it is a switch you can turn off in
+   Setup, and everything still draws (route only) when it is off. */
+
+/* Even stride sampling, keeping the first and last fix. Used only for
+   drawing — the stored record always keeps every point it captured. */
+function thinRoute(pts, max){
+  if(!pts || pts.length <= max) return pts || [];
+  const step = Math.ceil(pts.length/max), out = [];
+  for(let i=0;i<pts.length;i+=step) out.push(pts[i]);
+  if(out[out.length-1] !== pts[pts.length-1]) out.push(pts[pts.length-1]);
+  return out;
+}
+
+const RMV = new WeakMap();     // element -> current view
+function rmX(lon,z){ return (lon+180)/360*Math.pow(2,z)*256; }
+function rmY(lat,z){
+  const s = Math.sin(Math.max(-85.05,Math.min(85.05,lat))*Math.PI/180);
+  return (0.5 - Math.log((1+s)/(1-s))/(4*Math.PI))*Math.pow(2,z)*256;
+}
+function roadTilesOn(){
+  if(DB.settings.roadMap === false) return false;
+  return navigator.onLine !== false;
+}
+function rmTiles(v,W,H){
+  if(!roadTilesOn()) return "";
+  const n = Math.pow(2,v.z);
+  const x0=Math.floor(v.ox/256), x1=Math.floor((v.ox+W)/256);
+  const y0=Math.floor(v.oy/256), y1=Math.floor((v.oy+H)/256);
+  let out="";
+  for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++){
+    if(y<0||y>=n) continue;
+    const tx=((x%n)+n)%n;
+    out += "<img alt='' src='https://tile.openstreetmap.org/"+v.z+"/"+tx+"/"+y+".png'"
+        +  " style='left:"+Math.round(x*256-v.ox)+"px;top:"+Math.round(y*256-v.oy)+"px;width:256px;height:256px'"
+        +  " onerror=\"this.style.visibility='hidden'\">";
+  }
+  return out;
+}
+
+/* drawRoadMap(el, {h, follow, routes:[{pts,color}], pins:[], home, empty, maxZoom}) */
+function drawRoadMap(el, o){
+  if(!el) return;
+  o = o || {};
+  const H = o.h || 220;
+  el.classList.add("rmap");
+  el.style.height = H + "px";
+  const W = el.clientWidth || 0;
+  if(W < 40){
+    /* Not laid out yet, or on a screen that is currently hidden. Retry a few
+       frames, then stop — this runs from the 1 s tracker tick with the GPS
+       watch and wake lock live, and an unbounded rAF loop forcing layout
+       every frame is a battery fire. It redraws when the screen is shown. */
+    const n = (+el.dataset.rmWait || 0);
+    if(n < 3 && el.isConnected && el.offsetParent !== null){
+      el.dataset.rmWait = String(n+1);
+      requestAnimationFrame(()=>{ drawRoadMap(el,o); });
+    }
+    return;
+  }
+  delete el.dataset.rmWait;
+  const routes = (o.routes||[]).filter(r => r && r.pts && r.pts.length);
+  const pins   = o.pins || [];
+  const all = [];
+  routes.forEach(r => r.pts.forEach(p => all.push(p)));
+  pins.forEach(p => all.push(p));
+  if(o.home) all.push(o.home);
+  if(!all.length){
+    RMV.delete(el);
+    el.innerHTML = "<div class='rm-empty tiny'>"+(o.empty||"waiting for GPS…")+"</div>";
+    return;
+  }
+
+  const head = routes.length ? routes[routes.length-1].pts[routes[routes.length-1].pts.length-1] : all[all.length-1];
+  let v = RMV.get(el);
+  let keep = false;
+  if(v && v.W===W && v.H===H && el.querySelector("svg.rm-ovl") && v.tilesOn===roadTilesOn()){
+    if(o.follow){
+      const x = rmX(head.lon,v.z)-v.ox, y = rmY(head.lat,v.z)-v.oy;
+      keep = x > W*0.25 && x < W*0.75 && y > H*0.25 && y < H*0.75;
+    } else {
+      keep = all.every(p => {
+        const x = rmX(p.lon,v.z)-v.ox, y = rmY(p.lat,v.z)-v.oy;
+        return x > 12 && x < W-12 && y > 12 && y < H-12;
+      });
+    }
+  }
+
+  if(!keep){
+    let minLa=Infinity,maxLa=-Infinity,minLo=Infinity,maxLo=-Infinity;
+    all.forEach(p => { if(p.lat<minLa)minLa=p.lat; if(p.lat>maxLa)maxLa=p.lat;
+                       if(p.lon<minLo)minLo=p.lon; if(p.lon>maxLo)maxLo=p.lon; });
+    let z = Math.min(o.maxZoom || 17, 18);
+    if(o.follow){
+      /* Hold a fixed driving zoom and pan. Fitting the whole accumulated
+         route zoomed out monotonically — half an hour in you were looking at
+         a county, which is useless to a driver. */
+      z = Math.min(o.maxZoom || 16, 18);
+    } else {
+      for(; z>1; z--){
+        const w = rmX(maxLo,z)-rmX(minLo,z), h = rmY(minLa,z)-rmY(maxLa,z);
+        if(w <= (W-36) && h <= (H-36)) break;
+      }
+    }
+    const cLo = o.follow ? head.lon : (minLo+maxLo)/2;
+    const cLa = o.follow ? head.lat : (minLa+maxLa)/2;
+    v = { z:z, ox: rmX(cLo,z)-W/2, oy: rmY(cLa,z)-H/2, W:W, H:H, tilesOn:roadTilesOn() };
+    RMV.set(el, v);
+    el.innerHTML = "<div class='rm-tiles'>"+rmTiles(v,W,H)+"</div>"
+      + (v.tilesOn ? "<div class='rm-shade'></div>" : "")
+      + "<svg class='rm-ovl' viewBox='0 0 "+W+" "+H+"' xmlns='http://www.w3.org/2000/svg'></svg>"
+      + (v.tilesOn ? "<div class='rm-attr'>&copy; OpenStreetMap</div>"
+                   : "<div class='rm-flag'>"+(DB.settings.roadMap===false?"road map off":"offline")+" · route only</div>");
+  }
+
+  const X = lon => (rmX(lon,v.z)-v.ox);
+  const Y = lat => (rmY(lat,v.z)-v.oy);
+  let g = "";
+
+  if(o.home){
+    const hx=X(o.home.lon).toFixed(1), hy=Y(o.home.lat).toFixed(1);
+    g += "<path d='M"+hx+" "+(+hy-12)+" l10 10 h-3.5 v9 h-13 v-9 h-3.5 z' fill='#ffb020' stroke='#0b1020' stroke-width='1.5'/>";
+  }
+
+  routes.forEach(r => {
+    const d = r.pts.map((p,i)=> (i?"L":"M")+X(p.lon).toFixed(1)+" "+Y(p.lat).toFixed(1)).join(" ");
+    if(!d) return;
+    g += "<path d='"+d+"' fill='none' stroke='rgba(6,10,22,.75)' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/>"
+      +  "<path d='"+d+"' fill='none' stroke='"+(r.color||"#3ad1a5")+"' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/>";
+    const a=r.pts[0], b=r.pts[r.pts.length-1];
+    g += "<circle cx='"+X(a.lon).toFixed(1)+"' cy='"+Y(a.lat).toFixed(1)+"' r='5.5' fill='#5b8cff' stroke='#0b1020' stroke-width='2'/>";
+    if(o.follow){
+      g += "<circle class='rm-pulse' cx='"+X(b.lon).toFixed(1)+"' cy='"+Y(b.lat).toFixed(1)+"' r='7' fill='#3ad1a5'/>"
+        +  "<circle cx='"+X(b.lon).toFixed(1)+"' cy='"+Y(b.lat).toFixed(1)+"' r='7' fill='#3ad1a5' stroke='#0b1020' stroke-width='2.5'/>";
+    } else {
+      g += "<circle cx='"+X(b.lon).toFixed(1)+"' cy='"+Y(b.lat).toFixed(1)+"' r='6.5' fill='#3ad1a5' stroke='#0b1020' stroke-width='2'/>";
+    }
+  });
+
+  pins.forEach(p => {
+    const r = Math.min(16, 7 + (p.trips? p.trips.length:1)*1.5);
+    const col = p.color || "#ffb020";
+    g += "<circle cx='"+X(p.lon).toFixed(1)+"' cy='"+Y(p.lat).toFixed(1)+"' r='"+r.toFixed(1)+"' fill='"+col+"' fill-opacity='.25' stroke='"+col+"' stroke-width='2'/>"
+      +  "<text x='"+X(p.lon).toFixed(1)+"' y='"+(Y(p.lat)+3.6).toFixed(1)+"' text-anchor='middle' font-size='11' font-weight='700' fill='"+col+"'>"+(p.trips?p.trips.length:"")+"</text>";
+  });
+
+  /* scale bar — same honesty as the court map */
+  const miAcross = haversineMi(
+    (function(){ const la = (rmInvLat(v.oy+H/2, v.z)); return la; })(), rmInvLon(v.ox, v.z),
+    (function(){ const la = (rmInvLat(v.oy+H/2, v.z)); return la; })(), rmInvLon(v.ox+W, v.z));
+  if(miAcross > 0){
+    const nice = [.1,.25,.5,1,2,5,10,20,25,50,100].filter(x => x <= miAcross/2.6).pop() || r1(miAcross/3);
+    const barPx = (nice/miAcross)*W;
+    if(barPx > 20 && barPx < W-30){
+      g += "<g transform='translate(12,"+(H-14)+")'>"
+        + "<line x1='0' y1='0' x2='"+barPx.toFixed(1)+"' y2='0' stroke='#e6ecff' stroke-width='2.5' stroke-opacity='.9'/>"
+        + "<line x1='0' y1='-4' x2='0' y2='4' stroke='#e6ecff' stroke-width='2.5' stroke-opacity='.9'/>"
+        + "<line x1='"+barPx.toFixed(1)+"' y1='-4' x2='"+barPx.toFixed(1)+"' y2='4' stroke='#e6ecff' stroke-width='2.5' stroke-opacity='.9'/>"
+        + "<text x='"+(barPx/2).toFixed(1)+"' y='-7' text-anchor='middle' fill='#e6ecff' fill-opacity='.9' font-size='10.5' font-weight='700'>"
+        + (nice<1?nice:Math.round(nice))+" mi</text></g>";
+    }
+  }
+  const svg = el.querySelector("svg.rm-ovl");
+  if(svg) svg.innerHTML = g;
+}
+function rmInvLon(x,z){ return x/(256*Math.pow(2,z))*360 - 180; }
+function rmInvLat(y,z){
+  const n = Math.PI - 2*Math.PI*y/(256*Math.pow(2,z));
+  return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)));
 }
 
 /* ── trip math ───────────────────────────────────────────────────── */
@@ -866,6 +1188,16 @@ function validateTrip(t, ignoreId){
     w.push({level:"warn", msg:"Under half a mile. Double-check it."});
   if(t.miles!=null && t.miles === 0)
     w.push({level:"warn", msg:"Zero miles."});
+  /* The tracker records every mile actually driven, both legs included.
+     Doubling it is the single easiest way to overstate a court record. */
+  if(t.measureSource==="gps" && t.roundTrip && t.trackedMiles!=null && t.miles!=null
+     && Math.abs(t.miles - t.trackedMiles*2) < 0.15)
+    w.push({level:"bad", msg:"This is the GPS-recorded distance ("+t.trackedMiles.toFixed(1)+" mi) doubled. If the tracker ran for the whole drive it already counted the way back, and this claims those miles twice. Untick round trip unless the tracker only recorded one leg."});
+  else if(t.measureSource==="gps" && t.roundTrip)
+    w.push({level:"warn", msg:"Round trip is ticked on a GPS-recorded drive. Only correct if the tracker recorded one leg — if it ran the whole way, the return miles are already counted."});
+  if(t.measureSource==="gps" && t.trackedMiles!=null && t.miles!=null && !t.roundTrip
+     && Math.abs(t.miles - t.trackedMiles) > 0.05)
+    w.push({level:"warn", msg:"GPS recorded "+t.trackedMiles.toFixed(1)+" mi but this record says "+t.miles.toFixed(1)+" mi. The difference will be shown on the trip and in the export."});
 
   const prev = DB.trips
     .filter(x => x.id!==ignoreId && x.odoEnd!=null && (x.date < t.date || (x.date===t.date)))
@@ -1009,7 +1341,9 @@ function collectForm(){
     parking: num($("#fParking").value), tolls: num($("#fTolls").value), otherCost: num($("#fOther").value)
   };
   t.miles = computeMiles(t);
-  if(pendingTrack){
+  /* A pending drive belongs to a NEW trip only. Attaching it while editing an
+     existing record would graft someone else's GPS provenance onto it. */
+  if(pendingTrack && !editingId){
     t.trackedMiles = pendingTrack.trackedMiles;
     t.trackPoints  = pendingTrack.points;
     t.trackGaps    = pendingTrack.gaps;
@@ -1017,7 +1351,15 @@ function collectForm(){
     t.trackEndedAt   = new Date(pendingTrack.endedAt).toISOString();
     t.measureSource  = "gps";
   } else {
-    t.measureSource = t.milesManual != null ? "manual" : "odometer";
+    /* Editing a GPS-measured trip must not relabel it as hand-entered just
+       because the form is in manual mode — the route is still the evidence. */
+    const ex = editingId ? DB.trips.find(x=>x.id===editingId) : null;
+    if(ex && ex.measureSource === "gps"){
+      t.measureSource = "gps";
+      if(ex.trackedMiles != null) t.trackedMiles = ex.trackedMiles;
+    } else {
+      t.measureSource = t.milesManual != null ? "manual" : "odometer";
+    }
   }
   const rr = resolveRate(led, date);
   t.rateCentsApplied = rr ? rr.cents : null;
@@ -1080,7 +1422,7 @@ function setMode(m){
   } else {
     $("#rtLabel").textContent = "Round trip — double the miles entered";
     $("#rtHint").innerHTML = "On: the number above is one way and gets doubled.";
-    if(!editingId) $("#fRound").checked = true;
+    if(!editingId && !pendingTrack) $("#fRound").checked = true;
   }
   updateLive();
 }
@@ -1133,7 +1475,10 @@ function renderChips(){
 
 function resetAddForm(){
   editingId = null;
-  pendingTrack = null;
+  /* Do NOT touch pendingTrack here. Nulling the variable while leaving the
+     stored copy behind produced an orphan the app then deleted on the next
+     backgrounding — an unsaved drive lost with no message. A recorded drive
+     is destroyed only by clearPending(), which the user asks for. */
   $("#fDate").value = todayISO();
   $("#fOdoStart").value = lastOdoEnd()!=null ? lastOdoEnd() : "";
   $("#fOdoEnd").value = ""; $("#fMiles").value = "";
@@ -1146,7 +1491,9 @@ function resetAddForm(){
   $("#fForWhom").dataset.auto = "1";
   $("#btnSave").textContent = "Save trip";
   setMode(DB.settings.lastMode || "odo");
-  renderChips(); renderLedgerSeg(); updateLive();
+  renderChips(); renderLedgerSeg();
+  if(pendingTrack) pendToForm();      // a waiting drive goes straight back on the form
+  updateLive(); renderPending();
 }
 
 /* ── save / edit / delete with audit trail ───────────────────────── */
@@ -1179,16 +1526,32 @@ function saveTrip(){
     Object.assign(t, form);
     t.updatedAt = nowISO();
     t.changeLog = (t.changeLog||[]).concat(changes);
-    save(); toast(changes.length+" field"+(changes.length>1?"s":"")+" updated and logged.");
+    if(!save()){
+      alert("The change was NOT written to the device — storage is full.\n\n"
+        + "Export a JSON backup and free some space, then make the change again.");
+      return;
+    }
+    toast(changes.length+" field"+(changes.length>1?"s":"")+" updated and logged.");
   } else {
     const t = Object.assign({
       id: uuid(), createdAt: nowISO(), updatedAt: nowISO(), changeLog: []
     }, form);
     DB.trips.push(t);
     DB.settings.tripsSinceExport = (DB.settings.tripsSinceExport||0) + 1;
-    save();
+    if(!save()){
+      /* Roll the record back out of memory so the list cannot show a trip the
+         device does not have, and KEEP the recorded drive — it is the one
+         thing here that cannot be re-created. */
+      DB.trips.pop();
+      DB.settings.tripsSinceExport = Math.max(0,(DB.settings.tripsSinceExport||1) - 1);
+      renderPending(); renderAll();
+      alert("This trip was NOT saved — the device is out of storage.\n\n"
+        + "Your recorded drive is still on the Add screen. Export a JSON backup "
+        + "(Setup → Backup & export), free some space, then press Save trip again.");
+      return;
+    }
     const amt = tripAmount(t);
-    pendingTrack = null;
+    clearPending();
     toast("Saved · "+t.miles.toFixed(1)+" mi"+(amt!=null?" · "+money(amt):""));
   }
   resetAddForm(); renderAll();
@@ -1196,6 +1559,9 @@ function saveTrip(){
 
 function editTrip(id){
   const t = DB.trips.find(x=>x.id===id); if(!t) return;
+  if(pendingTrack && !confirm("You have a recorded drive of "+pendingTrack.trackedMiles.toFixed(1)
+      +" mi that hasn't been saved yet.\n\nEditing another trip now leaves it waiting — it stays "
+      +"on the Add screen. Continue?")) return;
   editingId = id; selectedLedgerId = t.ledgerId;
   $("#fDate").value = t.date;
   if(t.milesManual!=null){ addMode="manual"; }
@@ -1213,6 +1579,37 @@ function editTrip(id){
   $("#btnSave").textContent = "Update trip";
   closeSheet(); goto("add"); renderLedgerSeg(); updateLive();
   window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* Move a saved trip to another project. The rate class travels with the
+   project, so the frozen rate has to be re-resolved for the trip's own date —
+   and both the move and the new rate go into the change log. */
+function reassignLedger(id, newLid){
+  const t = DB.trips.find(x=>x.id===id); if(!t) return;
+  if(!newLid || newLid===t.ledgerId) return;
+  const oldL = ledgerById(t.ledgerId), newL = ledgerById(newLid);
+  if(!newL) return;
+  const rr = resolveRate(newL, t.date);
+  const newRate = rr ? rr.cents : null;
+
+  /* Moving a trip between projects is exactly how the same mile ends up
+     claimed twice. Run the same guard the save path runs, and make the user
+     look at it. */
+  const probe = Object.assign({}, t, {ledgerId:newLid, rateCentsApplied:newRate});
+  const hard = validateTrip(probe, t.id).filter(x => x.level==="bad");
+  if(hard.length && !confirm(hard.map(x=>x.msg.replace(/<[^>]+>/g,"")).join("\n\n") + "\n\nMove it anyway?")) return;
+
+  const changes = [{ts:nowISO(), field:"ledgerId", old:labelFor("ledgerId", t.ledgerId), new:labelFor("ledgerId", newLid)}];
+  if(String(t.rateCentsApplied) !== String(newRate))
+    changes.push({ts:nowISO(), field:"rateCentsApplied",
+      old:labelFor("rateCentsApplied", t.rateCentsApplied),
+      new:labelFor("rateCentsApplied", newRate)});
+  t.ledgerId = newLid;
+  t.rateCentsApplied = newRate;
+  t.updatedAt = nowISO();
+  t.changeLog = (t.changeLog||[]).concat(changes);
+  save(); renderAll(); openTrip(id);
+  toast("Moved to "+newL.name+(newRate!=null ? " · "+newRate.toFixed(1)+"¢/mi applied" : " · no verified rate for this date"), 6000);
 }
 
 function deleteTrip(id){
@@ -1305,6 +1702,17 @@ function openTrip(id){
     straight = r1(haversineMi(DB.settings.homeLat, DB.settings.homeLon, t.destLat, t.destLon));
   let h = "<h1>"+esc(t.destName||"(no destination)")+"</h1>"
     + "<div class='mini' style='margin-bottom:10px'>"+fmtDate(t.date)+" · <span class='badge' data-rc='"+((RATE_CLASSES[led.rateClass]||{}).css||"custom")+"'>"+esc(led.name)+"</span></div>";
+  /* Change the project right here. Tagging a drive to the wrong ledger is the
+     easiest mistake to make and it changes the rate, so it must be one tap to
+     fix — and every change is written to the record's history. */
+  h += "<div class='card tight'><div class='mini' style='margin-bottom:7px'>Project / ledger — tap to move this trip</div><div class='row' style='flex-wrap:wrap;gap:7px'>"
+    + DB.ledgers.filter(l => !l.archived || l.id===t.ledgerId).map(l => {
+        const rr = resolveRate(l, t.date);
+        const on = l.id===t.ledgerId;
+        return "<button class='btn sm"+(on?" pri":"")+"' data-move='"+l.id+"'"+(on?" disabled":"")+">"
+             + esc(l.name)+"<span class='tiny' style='display:block;opacity:.75'>"+(rr?rr.cents.toFixed(1)+"¢":"no rate")+"</span></button>";
+      }).join("")
+    + "</div></div>";
   if(w.length) h += warnHTML(w);
   h += "<div class='card'>"
     + kv("Miles", (t.miles==null?"—":t.miles.toFixed(1)+" mi"))
@@ -1328,7 +1736,7 @@ function openTrip(id){
     + (t.notes ? kv("Notes", esc(t.notes)) : "")
     + "</div>";
   if(t.trackPoints && t.trackPoints.length>1){
-    h += "<div class='card'><h2>Recorded route</h2><div class='mapwrap'>"+trkMiniMap(t.trackPoints)+"</div>"
+    h += "<div class='card'><h2>Recorded route</h2><div id='shRoute' class='mapwrap'></div>"
       + "<div class='tiny' style='margin-top:7px'>Captured live by GPS on this device between "
       + esc((t.trackStartedAt||"").slice(11,16))+" and "+esc((t.trackEndedAt||"").slice(11,16))
       + ". Blue is where the drive started, green where it ended.</div></div>";
@@ -1349,6 +1757,9 @@ function openTrip(id){
     + "<div class='row'><button class='btn pri' id='shEdit'>Edit</button><button class='btn danger' id='shDel'>Delete</button></div>"
     + "<div style='height:10px'></div><button class='btn wide ghost' id='shClose'>Close</button>";
   openSheet(h);
+  if(t.trackPoints && t.trackPoints.length>1)
+    drawRoadMap($("#shRoute"), {h:240, routes:[{pts:t.trackPoints, color:"#3ad1a5"}]});
+  $$("[data-move]").forEach(b => b.onclick = () => reassignLedger(id, b.getAttribute("data-move")));
   $("#shEdit").onclick = () => editTrip(id);
   $("#shDel").onclick  = () => { if(confirm("Delete this trip? It stays in your JSON backup and can be restored.")) deleteTrip(id); };
   $("#shClose").onclick = closeSheet;
@@ -1473,14 +1884,28 @@ function renderMap(){
       + "No trips in this filter have coordinates yet.<br><br>Tap <b>Use my location</b> on the Add Trip screen when you park — iPhone GPS works with no signal and no data.<br><br>"
       + (home?"":"Also set your <b>home coordinates</b> in Setup so routes have a starting point.")
       + "</div>";
-    $("#mapLegend").innerHTML=""; $("#mapStats").innerHTML=""; return;
+    $("#mapLegend").innerHTML=""; $("#mapStats").innerHTML="";
+    courtMapSVG = $("#mapBox").innerHTML; courtMapLegend = "";
+    applyMapMode([], home);
+    return;
   }
 
+  /* Thin each route for drawing. At map scale a 5,000-point line and a
+     400-point line are the same picture, and the thin one keeps the screen
+     responsive with years of drives on it. */
   const routePts = [];
-  list.forEach(t => { (t.trackPoints||[]).forEach(p => routePts.push({lat:p.lat, lon:p.lon})); });
+  list.forEach(t => { thinRoute(t.trackPoints, 400).forEach(p => routePts.push({lat:p.lat, lon:p.lon})); });
   const all = pts.map(p=>({lat:p.lat,lon:p.lon})).concat(home?[home]:[]).concat(routePts);
-  let minLa=Math.min(...all.map(p=>p.lat)), maxLa=Math.max(...all.map(p=>p.lat));
-  let minLo=Math.min(...all.map(p=>p.lon)), maxLo=Math.max(...all.map(p=>p.lon));
+  /* Math.min(...array) throws RangeError past ~125k arguments — about
+     twenty-five long recorded drives. It took the whole Map screen down AND
+     left printMap emitting the previous render, so a court exhibit would have
+     shown the wrong routes with no error anywhere. Loop instead. */
+  let minLa=Infinity, maxLa=-Infinity, minLo=Infinity, maxLo=-Infinity;
+  for(const p of all){
+    if(p.lat<minLa) minLa=p.lat; if(p.lat>maxLa) maxLa=p.lat;
+    if(p.lon<minLo) minLo=p.lon; if(p.lon>maxLo) maxLo=p.lon;
+  }
+  if(!isFinite(minLa)){ minLa=maxLa=0; minLo=maxLo=0; }
   const midLa = (minLa+maxLa)/2, kx = Math.cos(midLa*Math.PI/180);
   let spanLa = Math.max(maxLa-minLa, 0.02), spanLo = Math.max(maxLo-minLo, 0.02/Math.max(kx,.1));
   const padLa = spanLa*0.18, padLo = spanLo*0.18;
@@ -1513,7 +1938,7 @@ function renderMap(){
   list.filter(t => t.trackPoints && t.trackPoints.length > 1).forEach(t => {
     const rc = (RATE_CLASSES[(ledgerById(t.ledgerId)||{}).rateClass]||{}).css || "custom";
     const col = {medical:"#3ad1a5", business:"#5b8cff", charitable:"#c084fc", custom:"#ffb020"}[rc];
-    const d = t.trackPoints
+    const d = thinRoute(t.trackPoints, 400)
       .map((p,i)=> (i?"L":"M")+X(p.lon).toFixed(1)+" "+Y(p.lat).toFixed(1)).join(" ");
     if(d) g += "<path d='"+d+"' fill='none' stroke='"+col+"' stroke-width='3' stroke-opacity='.85' stroke-linecap='round' stroke-linejoin='round'/>";
   });
@@ -1576,6 +2001,46 @@ function renderMap(){
   sh += "<div style='height:10px'></div><button class='btn wide noprint' id='btnPrintMap'>Print / save this map</button></div>";
   $("#mapStats").innerHTML = sh;
   $("#btnPrintMap").onclick = () => printMap(year, lid);
+
+  /* The court exhibit is what was just drawn — keep it, whatever the screen
+     shows next, so printing never depends on a tile server. */
+  courtMapSVG = $("#mapBox").innerHTML;
+  courtMapLegend = $("#mapLegend").innerHTML;
+  applyMapMode(list, home);
+}
+
+let courtMapSVG = "", courtMapLegend = "";
+function applyMapMode(list, home){
+  const road = DB.settings.mapMode !== "court";
+  const rb = $("#mmRoad"), cb = $("#mmCourt");
+  if(rb) rb.classList.toggle("pri", road);
+  if(cb) cb.classList.toggle("pri", !road);
+  if(rb) rb.onclick = () => { DB.settings.mapMode="road";  save(); renderMap(); };
+  if(cb) cb.onclick = () => { DB.settings.mapMode="court"; save(); renderMap(); };
+  if(!road){
+    $("#mapBox").className = "mapwrap";
+    $("#mapBox").style.height = "";
+    $("#mapBox").innerHTML = courtMapSVG;
+    $("#mapLegend").innerHTML = courtMapLegend;
+    return;
+  }
+  const routes = list.filter(t => t.trackPoints && t.trackPoints.length > 1).map(t => {
+    const rc = (RATE_CLASSES[(ledgerById(t.ledgerId)||{}).rateClass]||{}).css || "custom";
+    return {pts:thinRoute(t.trackPoints, 400), color:{medical:"#3ad1a5",business:"#5b8cff",charitable:"#c084fc",custom:"#ffb020"}[rc]};
+  });
+  const {pts} = mapPoints($("#mYear").value, $("#mLedger").value);
+  const pins = pts.map(p => {
+    const rc = (RATE_CLASSES[(ledgerById(p.trips[0].ledgerId)||{}).rateClass]||{}).css || "custom";
+    return {lat:p.lat, lon:p.lon, trips:p.trips,
+            color:{medical:"#3ad1a5",business:"#5b8cff",charitable:"#c084fc",custom:"#ffb020"}[rc]};
+  });
+  $("#mapBox").innerHTML = "";
+  drawRoadMap($("#mapBox"), {h:420, routes:routes, pins:pins, home:home,
+    empty:"No trips in this filter have coordinates yet."});
+  $("#mapLegend").innerHTML = "<div class='tiny' style='margin-top:8px'>"
+    + "Roads from OpenStreetMap; the coloured lines are routes recorded by GPS on this device. "
+    + "Circles are destinations, and the number inside is how many trips went there. "
+    + "<b>The printed exhibit does not use this basemap</b> — switch to <b>Court exhibit</b> to see exactly what prints.</div>";
 }
 
 /* ══════════════════ SETTINGS ══════════════════ */
@@ -1643,6 +2108,12 @@ function renderSettings(){
     + "<div><input inputmode='decimal' id='sHomeLat' value='"+(DB.settings.homeLat??"")+"' placeholder='latitude'></div>"
     + "<div><input inputmode='decimal' id='sHomeLon' value='"+(DB.settings.homeLon??"")+"' placeholder='longitude'></div></div>"
     + "<div style='height:8px'></div><button class='btn' id='homeGps'>Set home from my current location</button></div>"
+    + "<div class='field'><label>Road map on screen</label>"
+    + "<label style='display:flex;gap:9px;align-items:flex-start;font-weight:400'>"
+    + "<input type='checkbox' id='sRoadMap' style='width:20px;height:20px;margin-top:2px'"+(DB.settings.roadMap===false?"":" checked")+">"
+    + "<span class='tiny'>Draw your route over real roads (OpenStreetMap tiles). This is the only time the app touches the network, and the tile server can tell roughly where you are. "
+    + "Turn it off and everything still works — you get the route line on a plain background. "
+    + "<b>The printed court exhibit never uses tiles either way.</b></span></label></div>"
     + "<button class='btn pri wide' id='saveSet'>Save settings</button></div>";
 
   /* exports */
@@ -1650,10 +2121,17 @@ function renderSettings(){
   h += "<div class='card'><h2>Backup &amp; export</h2>"
     + "<div class='mini' style='margin-bottom:10px'>Last export: <b>"+(last? fmtDate(last.slice(0,10))+" ("+daysSince(last)+" days ago)" : "never")+"</b> · "
     + (DB.settings.tripsSinceExport||0)+" trip(s) added since.</div>"
-    + "<div class='row'><div><label>Year</label><select id='xYear'></select></div><div><label>Project</label><select id='xLedger'></select></div></div>"
+    + "<div class='row'><div><label>Year</label><select id='xYear'></select></div>"
+    + "<div><label>Month</label><select id='xMonth'>"
+    + "<option value='all'>All months</option>"
+    + MON.map((m,i)=>"<option value='"+String(i+1).padStart(2,"0")+"'>"+m+"</option>").join("")
+    + "</select></div>"
+    + "<div><label>Project</label><select id='xLedger'></select></div></div>"
     + "<div style='height:10px'></div>"
     + "<button class='btn wide' id='xCsv'>Export CSV (filtered)</button><div style='height:8px'></div>"
     + "<button class='btn wide' id='xReport'>Printable court / tax report</button><div style='height:8px'></div>"
+    + "<button class='btn wide pri' id='xMonthNow'>This month &rarr; PDF</button>"
+    + "<div class='tiny' style='margin:6px 0 10px'>Opens the report, then Print &rarr; <b>Save as PDF</b>. Monthly subtotals, the rate in force on each trip date, the rate authority, and a signature and certification block. No fuel-comparison figures ever appear on it.</div>"
     + "<button class='btn pri wide' id='xJson'>Full JSON backup (everything)</button><div style='height:8px'></div>"
     + "<button class='btn wide' id='xImport'>Restore from JSON backup…</button>"
     + "<input type='file' id='fileImport' accept='.json,application/json' class='hidden'>"
@@ -1709,13 +2187,21 @@ function wireSettings(){
     DB.settings.homeLabel = $("#sHomeLabel").value.trim() || "Home";
     DB.settings.homeLat = num($("#sHomeLat").value);
     DB.settings.homeLon = num($("#sHomeLon").value);
+    DB.settings.roadMap = !!($("#sRoadMap") && $("#sRoadMap").checked);
     selectedLedgerId = DB.settings.lastLedgerId;
     sysLog("settings_save",""); save(); renderAll(); renderSettings(); toast("Settings saved.");
   };
   fillSelect($("#xYear"), true); fillLedgerSelect($("#xLedger"), true);
-  $("#xCsv").onclick    = () => exportCSV($("#xYear").value, $("#xLedger").value);
+  $("#xCsv").onclick    = () => exportCSV($("#xYear").value, $("#xLedger").value, $("#xMonth").value);
   $("#xJson").onclick   = () => exportJSON();
-  $("#xReport").onclick = () => buildReport($("#xYear").value, $("#xLedger").value);
+  $("#xReport").onclick = () => buildReport($("#xYear").value, $("#xLedger").value, $("#xMonth").value);
+  $("#xMonthNow").onclick = () => {
+    const now = todayISO();
+    const y = $("#xYear"), m = $("#xMonth");
+    if(y) y.value = now.slice(0,4);
+    if(m) m.value = now.slice(5,7);
+    buildReport(now.slice(0,4), $("#xLedger").value, now.slice(5,7));
+  };
   $("#xImport").onclick = () => $("#fileImport").click();
   $("#fileImport").onchange = e => { const f=e.target.files[0]; if(f) importJSON(f); e.target.value=""; };
   $("#viewSys").onclick = () => openSheet("<h1>System log</h1><div class='card'>"
@@ -1835,7 +2321,7 @@ function openRecalc(){
     if(!confirm("Recalculate "+changes.length+" record(s)?\n\nEach change will be stamped into that trip's change history. This cannot be auto-undone — restore a JSON backup if you change your mind.")) return;
     changes.forEach(x => {
       x.t.changeLog = (x.t.changeLog||[]).concat([{ts:nowISO(), field:"rateCentsApplied",
-        old:(x.from==null?"—":x.from+"¢"), new:(x.to==null?"—":x.to+"¢"), reason:"bulk recalculate"}]);
+        old:labelFor("rateCentsApplied", x.from), new:labelFor("rateCentsApplied", x.to), reason:"bulk recalculate"}]);
       x.t.rateCentsApplied = x.to; x.t.updatedAt = nowISO();
     });
     sysLog("recalculate", changes.length+" record(s) restated for "+$("#rcYear").value);
@@ -1852,8 +2338,13 @@ function download(name, text, mime){
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1500);
 }
-function markExported(kind){
-  DB.settings.lastExportAt = nowISO(); DB.settings.tripsSinceExport = 0;
+/* isFullBackup=false records the export in the log but leaves the "you have
+   never backed up" counter alone. Only the JSON carries the change log, the
+   deleted records, the GPS routes and the rate table — a printed report or a
+   CSV is not a backup, and letting either silence the nag hides real
+   exposure to iOS evicting the whole record. */
+function markExported(kind, isFullBackup){
+  if(isFullBackup !== false){ DB.settings.lastExportAt = nowISO(); DB.settings.tripsSinceExport = 0; }
   sysLog("export", kind); save(); renderNag();
 }
 function csvCell(v){
@@ -1875,29 +2366,51 @@ function csvRow(t, status){
     t.parking, t.tolls, t.otherCost, costs?costs.toFixed(2):"", ((amt||0)+costs).toFixed(2),
     t.notes, t.createdAt, t.updatedAt, (t.changeLog||[]).length, status].map(csvCell).join(",");
 }
-function exportCSV(year, lid){
-  const list = filterTrips(year, lid, "");
+function exportCSV(year, lid, month){
+  month = (month && month!=="all") ? month : null;
+  if(month && (!year || year==="all")){
+    year = todayISO().slice(0,4);
+    const ys = $("#xYear"); if(ys) ys.value = year;
+  }
+  let list = filterTrips(year, lid, "");
+  if(month) list = list.filter(t => t.date.slice(5,7)===month);
   if(!list.length){ toast("Nothing in that filter."); return; }
   const ledName = lid==="all" ? "all-projects" : (ledgerById(lid)||{name:"project"}).name.replace(/[^a-z0-9]+/gi,"-").toLowerCase();
-  const del = DB.deleted.filter(t => (year==="all"||yearOf(t.date)===year) && (lid==="all"||t.ledgerId===lid));
+  const del = DB.deleted.filter(t => (year==="all"||yearOf(t.date)===year) && (lid==="all"||t.ledgerId===lid)
+    && (!month || t.date.slice(5,7)===month));
   const lines = [CSV_COLS.join(",")]
     .concat(list.slice().reverse().map(t=>csvRow(t,"active")))
     .concat(del.map(t=>csvRow(t,"deleted")));
   const s = summarize(list);
   lines.push("");
-  lines.push(csvCell("TOTALS (active only)")+","+csvCell(year)+","+csvCell(ledName)+",,,"+csvCell(s.miles.toFixed(1))+",,,,,"+csvCell(s.dollars.toFixed(2)));
-  download("odosimple-"+(year==="all"?"all":year)+"-"+ledName+".csv", lines.join("\n"), "text/csv");
-  markExported("CSV "+year+"/"+ledName);
+  /* Build the totals line by column index. Hand-counting the commas put the
+     dollar total in the odoStart column and left amountDollars blank, so a
+     spreadsheet read of the export showed no money at all. */
+  const tot = new Array(CSV_COLS.length).fill("");
+  const at = (name, val) => { const i = CSV_COLS.indexOf(name); if(i>=0) tot[i] = val; };
+  at("id", "TOTALS (active only)");
+  at("date", month ? year+"-"+month : year);
+  at("project", ledName);
+  at("miles", s.miles.toFixed(1));
+  at("amountDollars", s.dollars.toFixed(2));
+  if(s.costs)    at("totalCosts", s.costs.toFixed(2));
+  if(s.combined) at("combined", s.combined.toFixed(2));
+  lines.push(tot.map(csvCell).join(","));
+  download("odosimple-"+(year==="all"?"all":year)+(month?"-"+month:"")+"-"+ledName+".csv", lines.join("\n"), "text/csv");
+  markExported("CSV "+year+(month?"-"+month:"")+"/"+ledName, false);
   toast("CSV exported.");
 }
 function exportJSON(){
+  /* Stamp the export BEFORE serialising, or the file records "never backed
+     up" and a restored device nags you about the backup you just restored. */
+  DB.settings.lastExportAt = nowISO(); DB.settings.tripsSinceExport = 0;
   const payload = {
     _format:"odosimple-backup", _formatVersion:1, _exportedAt:nowISO(),
     _note:"Complete backup: active trips, deleted trips, change logs, projects, rate table, fill-ups, settings.",
     data: DB
   };
   download("odosimple-backup-"+todayISO()+".json", JSON.stringify(payload,null,2), "application/json");
-  markExported("full JSON backup");
+  markExported("full JSON backup", true);
   toast("Backup saved. Keep it with your court file.", 5000);
 }
 function importJSON(file){
@@ -1969,12 +2482,12 @@ function reportCSS(){
   + "#rp .pg{page-break-after:always}"
   + "</style>";
 }
-function reportForLedger(l, list, year){
+function reportForLedger(l, list, period){
   const s = summarize(list);
   const rates = Array.from(new Set(list.map(t=>t.rateCentsApplied).filter(v=>v!=null))).sort((a,b)=>a-b);
   let h = "<div class='pg'>";
   h += "<h1>Mileage Record — "+esc(l.name)+"</h1>";
-  h += "<div class='hd'><b>Period:</b> "+(year==="all"?"all dates":"calendar year "+year)
+  h += "<div class='hd'><b>Period:</b> "+esc(period)
     + " &nbsp;·&nbsp; <b>Rate basis:</b> "+esc((RATE_CLASSES[l.rateClass]||{}).label||l.rateClass)
     + (rates.length ? " ("+rates.map(r=>r.toFixed(1)+"¢").join(" / ")+" per mile)" : "")
     + "<br><b>Prepared:</b> "+fmtDate(todayISO())+" &nbsp;·&nbsp; <b>Records:</b> "+s.n+"</div>";
@@ -2012,26 +2525,34 @@ function reportForLedger(l, list, year){
   h += "</div>";
   return h;
 }
-function buildReport(year, lid){
+function buildReport(year, lid, month){
+  month = (month && month!=="all") ? month : null;
+  if(month && (!year || year==="all")){
+    year = todayISO().slice(0,4);
+    const ys = $("#xYear"); if(ys) ys.value = year;      // don't let the screen lie about the period
+  }
+  const period = month ? MON[+month-1]+" "+year
+               : (year==="all" ? "all dates" : "calendar year "+year);
   const leds = lid==="all" ? DB.ledgers.filter(l => DB.trips.some(t=>t.ledgerId===l.id)) : [ledgerById(lid)].filter(Boolean);
   const parts = [];
   leds.forEach(l => {
-    const list = filterTrips(year, l.id, "");
-    if(list.length) parts.push(reportForLedger(l, list, year));
+    let list = filterTrips(year, l.id, "");
+    if(month) list = list.filter(t => t.date.slice(5,7)===month);
+    if(list.length) parts.push(reportForLedger(l, list, period));
   });
-  if(!parts.length){ toast("Nothing to report in that filter."); return; }
+  if(!parts.length){ toast("No trips in "+period+" for that project."); return; }
   $("#reportBody").innerHTML = reportCSS()
     + "<div class='noprint' style='margin:0 0 12px'><button class='btn pri' id='rpPrint'>Print / Save as PDF</button> "
     + "<button class='btn ghost' id='rpBack'>Back</button>"
     + "<div class='tiny' style='margin-top:8px'>Separate page per project. No fuel-comparison data appears here — actual miles and the official rate only.</div></div>"
     + "<div id='rp'>"+parts.join("")+"</div>";
   goto("report");
-  $("#rpPrint").onclick = () => { markExported("printable report "+year); window.print(); };
+  $("#rpPrint").onclick = () => { markExported("printable report · "+period, false); window.print(); };
   $("#rpBack").onclick = () => goto("set");
   window.scrollTo({top:0});
 }
 function printMap(year, lid){
-  const svg = $("#mapBox").innerHTML;
+  const svg = courtMapSVG || $("#mapBox").innerHTML;
   const led = lid==="all" ? "All projects" : (ledgerById(lid)||{name:""}).name;
   $("#reportBody").innerHTML = reportCSS()
     + "<div class='noprint' style='margin:0 0 12px'><button class='btn pri' id='rpPrint'>Print / Save as PDF</button> <button class='btn ghost' id='rpBack'>Back</button></div>"
@@ -2066,6 +2587,19 @@ function renderNag(){
   const since = DB.settings.tripsSinceExport||0;
   const total = DB.trips.length;
   let msg = null;
+  /* Storage pressure outranks the backup reminder: once the device is near
+     the limit the next save fails, and a save that fails is how a recorded
+     drive gets lost. Warn while there is still room to act. */
+  const load = storageLoad();
+  if(load > 0.7){
+    n.classList.remove("hidden");
+    n.innerHTML = "<div class='warnbox' style='margin:10px 0 0'>⚠ This app is using about <b>"
+      + Math.round(load*100) + "%</b> of the storage the browser will give it. When it fills, saving stops working. "
+      + "Export a JSON backup, then delete trips you have already filed."
+      + "<button class='btn sm' id='nagGo' style='margin-top:8px'>Back up now</button></div>";
+    $("#nagGo").onclick = () => exportJSON();
+    return;
+  }
   if(total && !last) msg = "You have <b>"+total+"</b> trip(s) and have never exported a backup.";
   else if(days!=null && days > 30) msg = "Last backup was <b>"+days+" days</b> ago.";
   else if(since > 15) msg = "<b>"+since+"</b> trips added since your last backup.";
@@ -2114,7 +2648,8 @@ function renderAll(){
   }
   $("#hdrSub").textContent = TRK.active
     ? (TRK.paused ? "⏸ drive paused · " : "● recording · ") + TRK.miles.toFixed(1) + " mi"
-    : DB.trips.length + " trip" + (DB.trips.length===1?"":"s") + " · offline";
+    : DB.trips.length + " trip" + (DB.trips.length===1?"":"s")
+      + (DB.settings.roadMap===false ? " · offline" : " · on device");
   $("#hdrSub").style.color = TRK.active ? (TRK.paused ? "var(--warn)" : "var(--acc2)") : "";
 }
 
@@ -2163,13 +2698,28 @@ function boot(){
       renderTracker();
     }
   });
-  window.addEventListener("pagehide", () => { if(TRK.active) trkSave(); });
+  window.addEventListener("pagehide", () => { if(TRK.active) trkSave(); pendSave(); });
+  window.addEventListener("beforeunload", e => {
+    if(TRK.active || pendingTrack){ e.preventDefault(); e.returnValue = ""; return ""; }
+  });
 
   renderAll(); resetAddForm(); goto("add");
-  renderTracker(); trkRestore();
+  renderTracker(); trkRestore(); pendRestore();
 
   if("serviceWorker" in navigator && location.protocol!=="file:"){
-    navigator.serviceWorker.register("sw.js").catch(()=>{});
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      /* The shell is served from cache so the app opens instantly with no
+         signal. That means a new version lands one launch later — so say so
+         and offer the reload rather than leaving a stale app in the truck. */
+      reg.addEventListener("updatefound", () => {
+        const sw = reg.installing; if(!sw) return;
+        sw.addEventListener("statechange", () => {
+          if(sw.state === "installed" && navigator.serviceWorker.controller && !TRK.active){
+            toast("A new version of ODO simple is ready.", 12000, "Reload", () => location.reload());
+          }
+        });
+      });
+    }).catch(()=>{});
   }
 }
 document.addEventListener("DOMContentLoaded", boot);
